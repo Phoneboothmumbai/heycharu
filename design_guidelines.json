@@ -1,0 +1,137 @@
+{
+  "identity": {
+    "name": "E1",
+    "role": "Anti-AI Designer",
+    "mission": "Create a 'Sales Brain' interface that feels intelligent, not generic.",
+    "principles": [
+      "Fusion over Imitation: Mix Swiss precision with AI 'magic'.",
+      "Emotion First: The user should feel 'omniscient' and 'in control'.",
+      "Content is King: Data is the hero; UI is the stage.",
+      "Zoom In: Focus on the details (customer sentiment, sales signals).",
+      "Negative Space: Use whitespace to reduce cognitive load."
+    ]
+  },
+  "typography": {
+    "fonts": {
+      "primary": "Plus Jakarta Sans",
+      "secondary": "Inter",
+      "mono": "JetBrains Mono"
+    },
+    "usage": {
+      "headings": "Plus Jakarta Sans, weights 600-800. Tight tracking (-0.02em).",
+      "body": "Inter, weights 400-500. Relaxed line-height (1.6).",
+      "data": "JetBrains Mono, for IDs, API keys, and raw metrics.",
+      "labels": "Inter, Uppercase, tracking-widest (0.1em), text-xs."
+    },
+    "installation": "Import via Google Fonts in index.css: @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap');"
+  },
+  "colors": {
+    "palette_name": "Neural Slate",
+    "description": "A high-contrast, intelligence-focused palette. Deep slate for focus, electric violet for AI actions.",
+    "light_mode": {
+      "background": "#F8F9FC",
+      "surface": "#FFFFFF",
+      "surface_highlight": "#F1F5F9",
+      "text_primary": "#0F172A",
+      "text_secondary": "#475569",
+      "border": "#E2E8F0",
+      "primary": "#6366F1",
+      "primary_foreground": "#FFFFFF"
+    },
+    "dark_mode": {
+      "background": "#0B0F19",
+      "surface": "#111827",
+      "surface_highlight": "#1F2937",
+      "text_primary": "#F8FAFC",
+      "text_secondary": "#94A3B8",
+      "border": "#1E293B",
+      "primary": "#818CF8",
+      "primary_foreground": "#FFFFFF"
+    },
+    "accents": {
+      "ai_magic": "#8B5CF6",
+      "success": "#10B981",
+      "warning": "#F59E0B",
+      "error": "#EF4444",
+      "whatsapp": "#25D366"
+    }
+  },
+  "layout_strategies": {
+    "dashboard": {
+      "type": "Bento Grid",
+      "grid_cols": "grid-cols-1 md:grid-cols-4 lg:grid-cols-12",
+      "gap": "gap-6",
+      "rules": [
+        "Hero Metric (Sales/Activity) takes col-span-4 row-span-2.",
+        "Feed/List (Recent Convos) takes col-span-4 row-span-4 (tall).",
+        "Quick Actions take col-span-2 row-span-1."
+      ]
+    },
+    "conversations": {
+      "type": "Three-Pane Split",
+      "structure": "List (25%) | Chat (50%) | Context/Intelligence (25%)",
+      "mobile_behavior": "Stack with slide-over navigation."
+    },
+    "customers": {
+      "type": "Dense Table + Drawer",
+      "rules": [
+        "Use full width tables.",
+        "Clicking a row opens a side drawer (Sheet) for details.",
+        "Sticky headers for long lists."
+      ]
+    }
+  },
+  "components": {
+    "cards": {
+      "style": "Flat with subtle border in light mode; Glass-like in dark mode.",
+      "classes": "bg-card border border-border/50 shadow-sm rounded-xl"
+    },
+    "buttons": {
+      "primary": "bg-primary text-primary-foreground hover:bg-primary/90 shadow-md rounded-lg px-6 py-2 font-medium transition-all active:scale-95",
+      "secondary": "bg-secondary text-secondary-foreground hover:bg-secondary/80 rounded-lg px-4 py-2 font-medium",
+      "ghost": "hover:bg-accent hover:text-accent-foreground rounded-lg px-4 py-2"
+    },
+    "inputs": {
+      "style": "bg-background border-input focus:ring-2 focus:ring-primary/20 focus:border-primary rounded-lg h-10"
+    },
+    "status_badges": {
+      "style": "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+      "variants": {
+        "active": "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400",
+        "pending": "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
+        "closed": "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-400"
+      }
+    }
+  },
+  "visual_enhancers": {
+    "glassmorphism": "backdrop-blur-xl bg-white/70 dark:bg-slate-900/70 border-white/20",
+    "gradients": "Use subtle mesh gradients for 'AI' moments (e.g., generating a response). Avoid full-screen gradients.",
+    "shadows": "shadow-[0_2px_8px_rgba(0,0,0,0.04)] dark:shadow-none",
+    "borders": "1px solid var(--border). In dark mode, use white/5 for a crisp edge."
+  },
+  "assets": {
+    "images": {
+      "avatars": [
+        "https://images.unsplash.com/photo-1769636929388-99eff95d3bf1?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzh8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBoZWFkc2hvdCUyMHBvcnRyYWl0fGVufDB8fHx8MTc2OTkzNjMwM3ww&ixlib=rb-4.1.0&q=85",
+        "https://images.unsplash.com/photo-1655249481446-25d575f1c054?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzh8MHwxfHNlYXJjaHwyfHxwcm9mZXNzaW9uYWwlMjBoZWFkc2hvdCUyMHBvcnRyYWl0fGVufDB8fHx8MTc2OTkzNjMwM3ww&ixlib=rb-4.1.0&q=85",
+        "https://images.unsplash.com/photo-1576558656222-ba66febe3dec?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzh8MHwxfHNlYXJjaHwzfHxwcm9mZXNzaW9uYWwlMjBoZWFkc2hvdCUyMHBvcnRyYWl0fGVufDB8fHx8MTc2OTkzNjMwM3ww&ixlib=rb-4.1.0&q=85",
+        "https://images.unsplash.com/photo-1558531304-a4773b7e3a9c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzh8MHwxfHNlYXJjaHw0fHxwcm9mZXNzaW9uYWwlMjBoZWFkc2hvdCUyMHBvcnRyYWl0fGVufDB8fHx8MTc2OTkzNjMwM3ww&ixlib=rb-4.1.0&q=85"
+      ],
+      "products": [
+        "https://images.unsplash.com/photo-1760804876134-a8089aaeccca?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzN8MHwxfHNlYXJjaHwxfHxyZXRhaWwlMjBwcm9kdWN0JTIwcGFja2FnaW5nJTIwbWluaW1hbGlzdHxlbnwwfHx8fDE3Njk5NDIxOTB8MA&ixlib=rb-4.1.0&q=85",
+        "https://images.unsplash.com/photo-1760804876422-7efb73b58048?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzN8MHwxfHNlYXJjaHwyfHxyZXRhaWwlMjBwcm9kdWN0JTIwcGFja2FnaW5nJTIwbWluaW1hbGlzdHxlbnwwfHx8fDE3Njk5NDIxOTB8MA&ixlib=rb-4.1.0&q=85",
+        "https://images.unsplash.com/photo-1760804876161-ba0337e998fe?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzN8MHwxfHNlYXJjaHwzfHxyZXRhaWwlMjBwcm9kdWN0JTIwcGFja2FnaW5nJTIwbWluaW1hbGlzdHxlbnwwfHx8fDE3Njk5NDIxOTB8MA&ixlib=rb-4.1.0&q=85",
+        "https://images.unsplash.com/photo-1755196712073-a536f713aa45?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzN8MHwxfHNlYXJjaHw0fHxyZXRhaWwlMjBwcm9kdWN0JTIwcGFja2FnaW5nJTIwbWluaW1hbGlzdHxlbnwwfHx8fDE3Njk5NDIxOTB8MA&ixlib=rb-4.1.0&q=85"
+      ]
+    },
+    "icons": "Use 'lucide-react' for standard UI icons. Use 'phosphor-icons' (Duotone) for feature highlights."
+  },
+  "universal_guidelines": [
+    "Avoid 'AI Slop': No generic gradients, no centered text blocks without purpose.",
+    "Spacing: Use p-6 or p-8 for containers. Don't cram content.",
+    "Contrast: Ensure text is readable. Use APCA standards.",
+    "Motion: Add micro-interactions to every button and card hover.",
+    "Data-TestID: All interactive elements MUST have a data-testid attribute."
+  ],
+  "instructions_to_main_agent": "Follow these guidelines strictly. Start by setting up the global CSS variables in index.css to match the 'Neural Slate' palette. Then, build the layout shell (Sidebar + Header). Finally, implement the pages using the specified grid layouts."
+}
