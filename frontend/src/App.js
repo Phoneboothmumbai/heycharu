@@ -14,6 +14,7 @@ import WhatsAppPage from "./pages/WhatsAppPage";
 import SettingsPage from "./pages/SettingsPage";
 import LeadsPage from "./pages/LeadsPage";
 import ExcludedNumbersPage from "./pages/ExcludedNumbersPage";
+import AutoMessagesPage from "./pages/AutoMessagesPage";
 
 // Layout
 import AppLayout from "./components/layout/AppLayout";
