@@ -12,6 +12,8 @@ import ProductsPage from "./pages/ProductsPage";
 import OrdersPage from "./pages/OrdersPage";
 import WhatsAppPage from "./pages/WhatsAppPage";
 import SettingsPage from "./pages/SettingsPage";
+import LeadsPage from "./pages/LeadsPage";
+import ExcludedNumbersPage from "./pages/ExcludedNumbersPage";
 
 // Layout
 import AppLayout from "./components/layout/AppLayout";
