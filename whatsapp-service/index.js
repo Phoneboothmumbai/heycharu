@@ -149,13 +149,30 @@ async function connectToWhatsApp() {
                 currentQR = null;
                 connectionStatus = 'connected';
                 
+                // CRITICAL: Set connection timestamp - only messages AFTER this get AI replies
+                connectionTimestamp = Math.floor(Date.now() / 1000);
+                console.log('Connection timestamp set:', connectionTimestamp, '- Only messages after this will get AI replies');
+                
                 // Get connected phone number
                 if (sock.user) {
-                    connectedPhone = sock.user.id.split(':')[0];
+                    // Format: 919876543210:XX@s.whatsapp.net - extract just the number
+                    const rawId = sock.user.id.split(':')[0];
+                    connectedPhone = formatPhoneNumber(rawId);
                     console.log('Connected as:', connectedPhone);
                 }
                 
-                // Start syncing messages
+                // Notify backend of connection with timestamp
+                try {
+                    await axios.post(`${BACKEND_URL}/api/whatsapp/connected`, {
+                        phone: connectedPhone,
+                        connectionTimestamp: connectionTimestamp
+                    });
+                    console.log('Backend notified of connection');
+                } catch (err) {
+                    console.error('Failed to notify backend:', err.message);
+                }
+                
+                // Start syncing messages (read-only historical data)
                 syncMessages();
             }
         });
