@@ -569,61 +569,156 @@ def parse_lead_injection_command(message: str) -> Optional[Dict]:
 # ============== AI AUTO-REPLY HELPERS ==============
 
 async def generate_ai_reply(customer_id: str, conversation_id: str, message: str) -> str:
-    """Generate AI reply for a customer message"""
+    """Generate AI reply for a customer message - STATE-DRIVEN CONVERSATION SYSTEM"""
     try:
         # Load customer context
         customer = await db.customers.find_one({"id": customer_id}, {"_id": 0})
         if not customer:
             return None
         
-        # Load open topics
-        topics = await db.topics.find(
+        # ========== RULE 1: ACTIVE TOPIC LOCK ==========
+        # Get the ACTIVE topic (most recent open/in_progress topic) - AI must stay locked to this
+        active_topic = await db.topics.find_one(
             {"customer_id": customer_id, "status": {"$in": ["open", "in_progress"]}},
-            {"_id": 0}
-        ).to_list(10)
+            {"_id": 0},
+            sort=[("created_at", -1)]
+        )
         
-        # Load recent messages
+        # Determine the conversation FLOW based on active topic
+        flow_type = "general"
+        if active_topic:
+            topic_type = active_topic.get("topic_type", "").lower()
+            topic_title = active_topic.get("title", "").lower()
+            
+            # Determine flow from topic
+            if any(word in topic_type or word in topic_title for word in ["repair", "service", "fix", "broken", "issue", "problem", "damage"]):
+                flow_type = "repair"
+            elif any(word in topic_type or word in topic_title for word in ["buy", "purchase", "price", "cost", "order", "inquiry"]):
+                flow_type = "sales"
+            else:
+                flow_type = "support"
+        
+        # ========== RULE 2: INTENT SWITCH GUARD ==========
+        # Only allow topic switch on explicit signals
+        intent_switch_signals = ["also", "another thing", "by the way", "one more", "additionally", "i also want", "can you also"]
+        message_lower = message.lower()
+        may_switch_intent = any(signal in message_lower for signal in intent_switch_signals)
+        
+        # ========== RULE 3: LAST QUESTION TRACKING ==========
+        # Get recent messages to find what the AI last asked
         recent_messages = await db.messages.find(
             {"conversation_id": conversation_id},
             {"_id": 0}
         ).sort("created_at", -1).limit(10).to_list(10)
         
+        # Find the last AI/agent question
+        last_ai_question = None
+        for msg in recent_messages:
+            if msg.get("sender_type") in ["ai", "agent", "human"]:
+                content = msg.get("content", "")
+                if "?" in content:
+                    last_ai_question = content
+                    break
+        
+        # ========== FLOW-SPECIFIC ALLOWED QUESTIONS ==========
+        repair_allowed_questions = """
+REPAIR FLOW - ALLOWED QUESTIONS ONLY:
+- Is the screen cracked, showing lines, or completely black?
+- Is the device turning on at all?
+- What device model and year is it?
+- Can you share a photo of the issue?
+- Where are you located for service?
+- When did this issue start?
+
+REPAIR FLOW - NEVER ASK:
+- RAM/storage/color questions
+- Product availability
+- New purchase questions
+- Price comparisons for new devices"""
+        
+        sales_allowed_questions = """
+SALES FLOW - ALLOWED QUESTIONS:
+- What storage capacity do you need?
+- Any color preference?
+- What's your budget range?
+- Is this for personal or business use?
+- Delivery address?
+
+SALES FLOW - NEVER ASK:
+- Repair diagnostic questions
+- What's broken/damaged questions"""
+        
+        # Select flow instructions
+        if flow_type == "repair":
+            flow_instructions = repair_allowed_questions
+        elif flow_type == "sales":
+            flow_instructions = sales_allowed_questions
+        else:
+            flow_instructions = "Ask clarifying questions to understand customer needs."
+        
         # Load KB
         kb_context = await get_kb_context()
         
-        # Load products for context
-        products = await db.products.find({"is_active": True}, {"_id": 0, "name": 1, "base_price": 1, "category": 1}).to_list(20)
-        products_list = ", ".join([f"{p['name']} (₹{p['base_price']})" for p in products])
+        # Load products for context (only for sales flow)
+        products_context = ""
+        if flow_type in ["sales", "general"]:
+            products = await db.products.find({"is_active": True}, {"_id": 0, "name": 1, "base_price": 1, "category": 1}).to_list(20)
+            products_context = f"PRODUCTS: {', '.join([f'{p[\"name\"]} (₹{p[\"base_price\"]})' for p in products])}"
         
-        # Build AI context
-        context = f"""You are a professional sales assistant for an Apple/electronics store. KEEP REPLIES SHORT (1-3 sentences).
+        # ========== BUILD STATE-AWARE PROMPT ==========
+        context = f"""You are a professional assistant for an electronics/Apple store. You handle repairs and sales.
 
-CUSTOMER INFO:
-Name: {customer.get('name')} | Phone: {customer.get('phone')} | Total Spent: ₹{customer.get('total_spent', 0)}
+=== CURRENT STATE ===
+ACTIVE TOPIC: {active_topic.get('title') if active_topic else 'None - classify intent from message'}
+FLOW TYPE: {flow_type.upper()}
+TOPIC STATUS: {active_topic.get('status') if active_topic else 'No active topic'}
+
+=== CUSTOMER INFO ===
+Name: {customer.get('name')} | Phone: {customer.get('phone')}
 Previous Devices: {json.dumps(customer.get('devices', []))}
 
-OPEN TOPICS: {', '.join([t['title'] for t in topics]) if topics else 'None'}
+=== CONVERSATION HISTORY ===
+{chr(10).join([f"{'Customer' if m['sender_type'] == 'customer' else 'You'}: {m['content']}" for m in reversed(recent_messages[-6:])])}
 
-PRODUCTS AVAILABLE:
-{products_list}
+=== LAST QUESTION YOU ASKED ===
+{last_ai_question if last_ai_question else 'None - this may be a new conversation'}
 
-KNOWLEDGE BASE:
-{kb_context if kb_context else "Standard policies apply."}
+=== CRITICAL RULES (MUST FOLLOW) ===
 
-STRICT RULES:
-1. NEVER reveal you are AI or mention internal systems
-2. NEVER offer discounts - say "Let me check with the team"
-3. NEVER promise delivery dates - say "I'll confirm availability"
-4. Be helpful, brief, professional
-5. If customer seems ready to buy, collect: color preference, storage, delivery address
-6. If unsure, escalate politely
+RULE 1 - TOPIC LOCK:
+You MUST stay locked to the active topic "{active_topic.get('title') if active_topic else 'new conversation'}".
+DO NOT switch topics unless customer explicitly says "also", "another thing", "by the way".
+Current message intent switch signal detected: {may_switch_intent}
 
-RECENT CHAT:
-{chr(10).join([f"{'Customer' if m['sender_type'] == 'customer' else 'You'}: {m['content']}" for m in reversed(recent_messages[-5:])])}
+RULE 2 - ANSWER THE LAST QUESTION FIRST:
+If you asked a question, the customer's message is likely answering it.
+Process their answer and ask the NEXT logical question.
+DO NOT re-ask what was already answered.
 
-Customer says: {message}
+RULE 3 - ONE QUESTION AT A TIME:
+Ask only ONE question per message. Never stack multiple questions.
 
-Reply briefly (1-3 sentences):"""
+RULE 4 - FLOW SEPARATION:
+{flow_instructions}
+
+RULE 5 - SAFE FALLBACK:
+If unsure, say "Let me check and get back to you" - DO NOT guess or switch topics.
+
+RULE 6 - SHORT REPLIES:
+Keep responses to 1-3 sentences maximum.
+
+{products_context}
+
+=== CUSTOMER'S NEW MESSAGE ===
+"{message}"
+
+=== YOUR TASK ===
+1. If this answers your last question, acknowledge and ask the NEXT logical question
+2. Stay in {flow_type.upper()} flow - do not switch
+3. Ask only ONE question
+4. Keep it brief and human
+
+Your reply:"""
 
         # Generate response
         chat = LlmChat(
@@ -634,6 +729,20 @@ Reply briefly (1-3 sentences):"""
         
         user_msg = UserMessage(text=message)
         response = await chat.send_message(user_msg)
+        
+        # ========== UPDATE TOPIC METADATA ==========
+        # Track conversation step
+        if active_topic:
+            step_count = active_topic.get("step_count", 0) + 1
+            await db.topics.update_one(
+                {"id": active_topic["id"]},
+                {"$set": {
+                    "last_ai_question": response if "?" in response else last_ai_question,
+                    "last_customer_message": message,
+                    "step_count": step_count,
+                    "updated_at": datetime.now(timezone.utc).isoformat()
+                }}
+            )
         
         return response
         
