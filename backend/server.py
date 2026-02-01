@@ -568,8 +568,8 @@ def parse_lead_injection_command(message: str) -> Optional[Dict]:
 
 # ============== AI AUTO-REPLY HELPERS ==============
 
-async def generate_ai_reply(customer_id: str, conversation_id: str, message: str) -> str:
-    """Generate AI reply for a customer message - CONTEXT-AWARE SYSTEM"""
+async def generate_ai_reply(customer_id: str, conversation_id: str, message: str, retry_count: int = 0) -> str:
+    """Generate AI reply for a customer message - CONTEXT-AWARE SYSTEM with retry and escalation"""
     try:
         # Load customer context
         customer = await db.customers.find_one({"id": customer_id}, {"_id": 0})
@@ -646,6 +646,14 @@ Your reply (be helpful, natural, and follow ALL rules above):"""
         # Check if response is empty
         if not response or len(response.strip()) == 0:
             logger.warning(f"AI returned empty response for message: {message[:50]}")
+            
+            # RETRY: Try once more with fresh context
+            if retry_count < 1:
+                logger.info("Retrying AI response...")
+                return await generate_ai_reply(customer_id, conversation_id, message, retry_count + 1)
+            
+            # ESCALATE: Notify owner and respond to customer
+            await escalate_to_owner(customer, conversation_history, message, "AI returned empty response")
             return "Let me check on that and get back to you shortly."
         
         # Update topic if exists
@@ -662,8 +670,73 @@ Your reply (be helpful, natural, and follow ALL rules above):"""
         
     except Exception as e:
         logger.error(f"AI reply error: {e}")
-        # Return a fallback message instead of None
-        return "I'm having trouble processing that. Let me check and get back to you."
+        
+        # RETRY: Try once more
+        if retry_count < 1:
+            logger.info("Retrying AI response after error...")
+            return await generate_ai_reply(customer_id, conversation_id, message, retry_count + 1)
+        
+        # ESCALATE: Notify owner
+        try:
+            customer = await db.customers.find_one({"id": customer_id}, {"_id": 0})
+            recent_msgs = await db.messages.find({"conversation_id": conversation_id}, {"_id": 0}).sort("created_at", -1).limit(10).to_list(10)
+            history = "\n".join([f"{'Customer' if m.get('sender_type') == 'customer' else 'AI'}: {m.get('content', '')[:100]}" for m in reversed(recent_msgs)])
+            await escalate_to_owner(customer, history, message, str(e))
+        except:
+            pass
+        
+        return "Let me check on that and get back to you shortly."
+
+
+async def escalate_to_owner(customer: dict, conversation_history: str, customer_message: str, error_reason: str):
+    """Notify owner via WhatsApp when AI cannot respond"""
+    try:
+        # Get owner phone from settings
+        settings = await db.settings.find_one({"type": "owner"}, {"_id": 0})
+        owner_phone = settings.get("owner_phone") if settings else None
+        
+        if not owner_phone:
+            logger.warning("No owner phone configured for escalation")
+            return
+        
+        # Build escalation message
+        customer_name = customer.get("name", "Unknown") if customer else "Unknown"
+        customer_phone = customer.get("phone", "Unknown") if customer else "Unknown"
+        
+        escalation_msg = f"""🚨 *ESCALATION - AI Needs Help*
+
+*Customer:* {customer_name}
+*Phone:* {customer_phone}
+
+*Issue:* {error_reason}
+
+*Customer's Message:*
+{customer_message}
+
+*Recent Conversation:*
+{conversation_history[-500:]}
+
+---
+Reply to this message with your response. I will forward it to the customer."""
+
+        # Send to owner
+        await send_whatsapp_message(owner_phone, escalation_msg)
+        
+        # Store escalation for tracking
+        await db.escalations.insert_one({
+            "id": str(uuid.uuid4()),
+            "customer_id": customer.get("id") if customer else None,
+            "customer_phone": customer_phone,
+            "reason": error_reason,
+            "customer_message": customer_message,
+            "status": "pending_owner_reply",
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+        
+        logger.info(f"Escalation sent to owner for customer: {customer_phone}")
+        
+    except Exception as e:
+        logger.error(f"Failed to escalate to owner: {e}")
 
 async def send_whatsapp_message(phone: str, message: str) -> bool:
     """Send a WhatsApp message via the WhatsApp service"""
