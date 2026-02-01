@@ -1978,33 +1978,151 @@ async def reconnect_whatsapp(user: dict = Depends(get_current_user)):
     except Exception as e:
         return {"error": str(e)}
 
+@api_router.post("/whatsapp/connected")
+async def handle_whatsapp_connected(data: WhatsAppConnected):
+    """Handle WhatsApp connection notification - stores connection timestamp"""
+    global whatsapp_connection_timestamp
+    whatsapp_connection_timestamp = data.connectionTimestamp
+    logger.info(f"WhatsApp connected. Phone: {data.phone}, Timestamp: {data.connectionTimestamp}")
+    
+    # Store in settings for persistence
+    await db.settings.update_one(
+        {"type": "whatsapp"},
+        {"$set": {
+            "type": "whatsapp",
+            "connected_phone": data.phone,
+            "connection_timestamp": data.connectionTimestamp,
+            "connected_at": datetime.now(timezone.utc).isoformat()
+        }},
+        upsert=True
+    )
+    
+    return {"success": True, "message": f"Connection timestamp recorded: {data.connectionTimestamp}"}
+
 @api_router.post("/whatsapp/send")
 async def api_send_whatsapp_message(phone: str, message: str, user: dict = Depends(get_current_user)):
     """Send message via WhatsApp (API route)"""
     try:
+        logger.info(f"Sending WhatsApp message to: {phone}")
         response = await asyncio.get_event_loop().run_in_executor(
             None, lambda: requests.post(f"{WA_SERVICE_URL}/send", json={"phone": phone, "message": message}, timeout=30)
         )
-        return response.json()
+        result = response.json()
+        logger.info(f"WhatsApp send result: {result}")
+        return result
     except Exception as e:
+        logger.error(f"WhatsApp send error: {str(e)}")
         return {"error": str(e)}
+
+# Helper: Normalize phone number to consistent format
+def normalize_phone(phone: str) -> tuple:
+    """Normalize phone number and return (clean_digits, formatted_display)"""
+    # Remove all non-digits
+    clean = ''.join(c for c in phone if c.isdigit())
+    
+    # If too long, take last 10 digits and prefix with 91
+    if len(clean) > 12:
+        clean = '91' + clean[-10:]
+    # If 10 digits, assume India
+    elif len(clean) == 10:
+        clean = '91' + clean
+    # If doesn't start with 91, prefix it
+    elif not clean.startswith('91') and len(clean) >= 10:
+        clean = '91' + clean[-10:]
+    
+    # Format for display: +91 98765 43210
+    if len(clean) >= 12:
+        formatted = f"+{clean[:2]} {clean[2:7]} {clean[7:12]}"
+    else:
+        formatted = f"+{clean}"
+    
+    return clean, formatted
 
 @api_router.post("/whatsapp/incoming")
 async def handle_incoming_whatsapp(data: WhatsAppIncoming):
     """Handle incoming WhatsApp message from Node.js service
     
     This handler:
-    1. Checks if number is EXCLUDED (silent monitoring - no reply)
-    2. Checks if message is from OWNER with lead injection command
-    3. Otherwise, processes normally and sends AI auto-reply
+    1. Checks if message is HISTORICAL (before connection) - read-only, no reply
+    2. Checks if number is EXCLUDED (silent monitoring - no reply)
+    3. Checks if message is from OWNER with lead injection command
+    4. Otherwise, processes normally and sends AI auto-reply
     """
+    global whatsapp_connection_timestamp
+    
     try:
-        phone = data.phone.replace("+", "").replace(" ", "")
-        if not phone.startswith("91"):
-            phone = "91" + phone
-        phone_formatted = f"+{phone[:2]} {phone[2:7]} {phone[7:]}"
+        # Normalize phone number
+        phone, phone_formatted = normalize_phone(data.phone)
         
         now = datetime.now(timezone.utc).isoformat()
+        
+        logger.info(f"Incoming WhatsApp: {phone_formatted}, Historical: {data.isHistorical}, Message: {data.message[:50]}...")
+        
+        # ========== CHECK 0: Is this a HISTORICAL message? ==========
+        if data.isHistorical:
+            logger.info(f"HISTORICAL MODE: Message from {phone_formatted} is before connection timestamp - storing without reply")
+            
+            # Store the message for context but don't trigger any AI response
+            # Find or create customer silently
+            customer = await db.customers.find_one({"phone": {"$regex": phone[-10:]}}, {"_id": 0})
+            if not customer:
+                customer_id = str(uuid.uuid4())
+                customer = {
+                    "id": customer_id,
+                    "name": f"WhatsApp {phone_formatted}",
+                    "phone": phone_formatted,
+                    "customer_type": "individual",
+                    "addresses": [],
+                    "preferences": {"communication": "whatsapp"},
+                    "purchase_history": [],
+                    "devices": [],
+                    "tags": ["whatsapp", "historical-sync"],
+                    "notes": "",
+                    "total_spent": 0.0,
+                    "last_interaction": now,
+                    "created_at": now
+                }
+                await db.customers.insert_one(customer)
+            
+            # Find or create conversation
+            conv = await db.conversations.find_one({"customer_id": customer["id"]})
+            if not conv:
+                conv_id = str(uuid.uuid4())
+                conv = {
+                    "id": conv_id,
+                    "customer_id": customer["id"],
+                    "customer_name": customer["name"],
+                    "customer_phone": customer["phone"],
+                    "channel": "whatsapp",
+                    "status": "active",
+                    "last_message": data.message,
+                    "last_message_at": now,
+                    "unread_count": 0,  # Don't mark as unread for historical
+                    "created_at": now
+                }
+                await db.conversations.insert_one(conv)
+            
+            # Save historical message with flag
+            msg_id = str(uuid.uuid4())
+            msg_doc = {
+                "id": msg_id,
+                "conversation_id": conv["id"],
+                "content": data.message,
+                "sender_type": "customer",
+                "message_type": "text",
+                "attachments": [],
+                "wa_message_id": data.messageId,
+                "is_historical": True,  # Mark as historical
+                "created_at": now
+            }
+            await db.messages.insert_one(msg_doc)
+            
+            return {
+                "success": True,
+                "mode": "historical",
+                "message": "Historical message stored (no AI reply)",
+                "customer_id": customer["id"]
+            }
         
         # ========== CHECK 1: Is this number EXCLUDED? ==========
         is_excluded = await is_number_excluded(phone)
