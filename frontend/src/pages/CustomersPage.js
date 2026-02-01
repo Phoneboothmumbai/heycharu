@@ -74,7 +74,7 @@ const CustomersPage = () => {
     try {
       const params = new URLSearchParams();
       if (search) params.append("search", search);
-      if (typeFilter) params.append("customer_type", typeFilter);
+      if (typeFilter && typeFilter !== "all") params.append("customer_type", typeFilter);
       
       const response = await axios.get(`${API_URL}/api/customers?${params}`);
       setCustomers(response.data);
