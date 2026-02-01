@@ -107,6 +107,19 @@ const SettingsPage = () => {
               data-testid="business-name-input"
             />
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="owner_phone">Owner's Phone (for Lead Injection via WhatsApp)</Label>
+            <Input
+              id="owner_phone"
+              value={settings.owner_phone || ""}
+              onChange={(e) => setSettings({ ...settings, owner_phone: e.target.value })}
+              placeholder="+91 98765 43210"
+              data-testid="owner-phone-input"
+            />
+            <p className="text-xs text-muted-foreground">
+              Messages from this number with lead commands will be processed as lead injections
+            </p>
+          </div>
         </CardContent>
       </Card>
 
