@@ -1058,6 +1058,167 @@ async def delete_kb_article(article_id: str, user: dict = Depends(get_current_us
         raise HTTPException(status_code=404, detail="Article not found")
     return {"message": "Article deleted"}
 
+# ============== KB SCRAPE & IMPORT ==============
+
+class WebScrapeRequest(BaseModel):
+    url: str
+    title: Optional[str] = None
+    category: str = "general"
+
+@api_router.post("/kb/scrape-url")
+async def scrape_website_to_kb(data: WebScrapeRequest, user: dict = Depends(get_current_user)):
+    """Scrape content from a website URL and add to Knowledge Base"""
+    from bs4 import BeautifulSoup
+    
+    try:
+        # Fetch the webpage
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        response = requests.get(data.url, headers=headers, timeout=30)
+        response.raise_for_status()
+        
+        # Parse HTML
+        soup = BeautifulSoup(response.text, 'lxml')
+        
+        # Remove script and style elements
+        for element in soup(['script', 'style', 'nav', 'footer', 'header', 'aside']):
+            element.decompose()
+        
+        # Get text content
+        text = soup.get_text(separator='\n', strip=True)
+        
+        # Clean up multiple newlines
+        import re
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        
+        # Limit content length (keep first 10000 chars)
+        if len(text) > 10000:
+            text = text[:10000] + "\n\n[Content truncated...]"
+        
+        # Get title from page if not provided
+        title = data.title or soup.title.string if soup.title else data.url
+        
+        # Create KB article
+        article_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+        
+        article = {
+            "id": article_id,
+            "title": title[:200],
+            "category": data.category,
+            "content": text,
+            "tags": ["scraped", "web"],
+            "is_active": True,
+            "source_url": data.url,
+            "created_at": now,
+            "updated_at": now
+        }
+        
+        await db.knowledge_base.insert_one(article)
+        
+        return {
+            "success": True,
+            "article_id": article_id,
+            "title": title[:200],
+            "content_length": len(text),
+            "message": f"Successfully scraped and added to KB"
+        }
+        
+    except requests.exceptions.RequestException as e:
+        raise HTTPException(status_code=400, detail=f"Failed to fetch URL: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Scraping failed: {str(e)}")
+
+@api_router.post("/kb/upload-excel")
+async def upload_excel_to_kb(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    """Upload Excel file to add multiple KB articles or products
+    
+    Excel should have columns: title, category, content, tags (optional)
+    OR for products: name, description, category, sku, price, stock
+    """
+    import pandas as pd
+    import io
+    
+    if not file.filename.endswith(('.xlsx', '.xls')):
+        raise HTTPException(status_code=400, detail="Only Excel files (.xlsx, .xls) are allowed")
+    
+    try:
+        contents = await file.read()
+        df = pd.read_excel(io.BytesIO(contents))
+        
+        # Convert column names to lowercase
+        df.columns = [col.lower().strip() for col in df.columns]
+        
+        now = datetime.now(timezone.utc).isoformat()
+        added_count = 0
+        
+        # Check if this is a KB upload or Product upload
+        if 'title' in df.columns and 'content' in df.columns:
+            # KB Articles upload
+            for _, row in df.iterrows():
+                article = {
+                    "id": str(uuid.uuid4()),
+                    "title": str(row.get('title', '')).strip(),
+                    "category": str(row.get('category', 'general')).strip().lower(),
+                    "content": str(row.get('content', '')).strip(),
+                    "tags": str(row.get('tags', '')).split(',') if pd.notna(row.get('tags')) else [],
+                    "is_active": True,
+                    "created_at": now,
+                    "updated_at": now
+                }
+                if article['title'] and article['content']:
+                    await db.knowledge_base.insert_one(article)
+                    added_count += 1
+            
+            return {
+                "success": True,
+                "type": "knowledge_base",
+                "added": added_count,
+                "message": f"Added {added_count} KB articles"
+            }
+        
+        elif 'name' in df.columns and ('price' in df.columns or 'base_price' in df.columns):
+            # Products upload
+            for _, row in df.iterrows():
+                price = row.get('price') or row.get('base_price') or 0
+                product = {
+                    "id": str(uuid.uuid4()),
+                    "name": str(row.get('name', '')).strip(),
+                    "description": str(row.get('description', '')).strip(),
+                    "category": str(row.get('category', 'general')).strip(),
+                    "sku": str(row.get('sku', str(uuid.uuid4())[:8])).strip(),
+                    "base_price": float(price) if pd.notna(price) else 0,
+                    "tax_rate": float(row.get('tax_rate', 18)) if pd.notna(row.get('tax_rate')) else 18,
+                    "final_price": float(price) * 1.18 if pd.notna(price) else 0,
+                    "stock": int(row.get('stock', 0)) if pd.notna(row.get('stock')) else 0,
+                    "images": [],
+                    "specifications": {},
+                    "is_active": True,
+                    "created_at": now
+                }
+                if product['name']:
+                    await db.products.insert_one(product)
+                    added_count += 1
+            
+            return {
+                "success": True,
+                "type": "products",
+                "added": added_count,
+                "message": f"Added {added_count} products"
+            }
+        
+        else:
+            raise HTTPException(
+                status_code=400, 
+                detail="Excel must have columns: [title, content, category] for KB or [name, price, category] for products"
+            )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to process Excel: {str(e)}")
+
 # ============== ESCALATIONS ROUTES ==============
 
 @api_router.get("/escalations", response_model=List[EscalationResponse])
