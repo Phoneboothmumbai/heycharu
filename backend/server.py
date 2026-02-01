@@ -2640,22 +2640,54 @@ async def handle_incoming_whatsapp(data: WhatsAppIncoming):
             )
             
             if pending_escalation and not data.message.lower().startswith("customer"):
-                # Owner is replying to escalation - format and forward to customer
+                # Owner is replying to escalation - polish and forward to customer
                 customer_phone = pending_escalation.get("customer_phone")
                 customer_name = pending_escalation.get("customer_name", "Customer")
+                original_question = pending_escalation.get("customer_message", "")
                 
                 if customer_phone:
-                    # Format owner's reply professionally
                     owner_reply = data.message.strip()
                     
-                    # Clean up the reply - remove any internal notes
-                    formatted_reply = owner_reply
+                    # Polish the reply using AI - keep meaning, make professional
+                    try:
+                        polish_prompt = f"""You are a helpful store assistant. Polish this owner's reply to make it professional and friendly for a customer.
+
+ORIGINAL CUSTOMER QUESTION: "{original_question}"
+
+OWNER'S RAW REPLY: "{owner_reply}"
+
+RULES:
+1. Keep ALL the information exactly the same (prices, specs, availability)
+2. Do NOT add any new information
+3. Do NOT remove any information
+4. Make it friendly and professional
+5. Keep it concise (2-4 sentences max)
+6. Add appropriate greeting if missing
+7. Do NOT mention "owner", "boss", or internal processes
+
+Write the polished reply:"""
+
+                        chat = LlmChat(
+                            api_key=EMERGENT_LLM_KEY,
+                            session_id=f"polish-{pending_escalation['id']}"
+                        ).with_model("openai", "gpt-5.2")
+                        
+                        polished_reply = await chat.send_message(UserMessage(text=polish_prompt))
+                        
+                        # Use polished reply if valid, otherwise use original
+                        if polished_reply and len(polished_reply.strip()) > 10:
+                            formatted_reply = polished_reply.strip()
+                        else:
+                            formatted_reply = owner_reply
+                            
+                    except Exception as e:
+                        logger.error(f"Failed to polish reply: {e}")
+                        # Fallback: basic formatting
+                        formatted_reply = owner_reply
+                        if len(owner_reply) < 50 and not owner_reply.endswith(('.', '!', '?')):
+                            formatted_reply = owner_reply + "."
                     
-                    # If reply is very short/informal, make it slightly more professional
-                    if len(owner_reply) < 50 and not owner_reply.endswith(('.', '!', '?')):
-                        formatted_reply = owner_reply + "."
-                    
-                    # Send formatted reply to the customer
+                    # Send polished reply to the customer
                     await send_whatsapp_message(customer_phone, formatted_reply)
                     
                     # Mark escalation as resolved
@@ -2664,6 +2696,7 @@ async def handle_incoming_whatsapp(data: WhatsAppIncoming):
                         {"$set": {
                             "status": "resolved",
                             "owner_reply": owner_reply,
+                            "formatted_reply": formatted_reply,
                             "resolved_at": datetime.now(timezone.utc).isoformat()
                         }}
                     )
@@ -2690,10 +2723,11 @@ async def handle_incoming_whatsapp(data: WhatsAppIncoming):
                             {"$set": {"last_message": formatted_reply, "last_message_at": datetime.now(timezone.utc).isoformat()}}
                         )
                     
-                    # Confirm to owner
-                    await send_whatsapp_message(phone, f"✓ Sent to {customer_name}")
+                    # Confirm to owner with preview
+                    preview = formatted_reply[:80] + "..." if len(formatted_reply) > 80 else formatted_reply
+                    await send_whatsapp_message(phone, f"✓ Sent to {customer_name}:\n\n\"{preview}\"")
                     
-                    logger.info(f"Owner reply forwarded to customer: {customer_phone}")
+                    logger.info(f"Owner reply polished and forwarded to customer: {customer_phone}")
                     return {
                         "success": True,
                         "mode": "owner_reply_forwarded",
