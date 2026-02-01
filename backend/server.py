@@ -474,6 +474,157 @@ async def create_escalation(customer_id: str, conversation_id: str, reason: str,
     
     return escalation
 
+# ============== EXCLUDED NUMBERS HELPERS ==============
+
+async def is_number_excluded(phone: str) -> bool:
+    """Check if a phone number is in the exclusion list"""
+    # Normalize phone number
+    normalized = phone.replace("+", "").replace(" ", "").replace("-", "")
+    if len(normalized) > 10:
+        normalized = normalized[-10:]  # Get last 10 digits
+    
+    excluded = await db.excluded_numbers.find_one({
+        "$or": [
+            {"phone": {"$regex": normalized}},
+            {"phone": phone}
+        ]
+    })
+    return excluded is not None
+
+async def get_excluded_number_info(phone: str) -> Optional[Dict]:
+    """Get exclusion info for a number"""
+    normalized = phone.replace("+", "").replace(" ", "").replace("-", "")
+    if len(normalized) > 10:
+        normalized = normalized[-10:]
+    
+    return await db.excluded_numbers.find_one({
+        "$or": [
+            {"phone": {"$regex": normalized}},
+            {"phone": phone}
+        ]
+    }, {"_id": 0})
+
+# ============== OWNER COMMAND PARSING ==============
+
+def parse_lead_injection_command(message: str) -> Optional[Dict]:
+    """Parse owner's lead injection command
+    Examples:
+    - "Customer name Rahul, number 9876543210 is asking for iPhone 15 Pro Max"
+    - "Lead: Priya - 8765432109 - wants MacBook Air"
+    """
+    import re
+    
+    # Pattern 1: "Customer name XXX, number XXX is asking for YYY"
+    pattern1 = r"(?:customer\s+)?name\s+([^,]+),?\s*(?:number|phone|mobile)?\s*[:\s]*([0-9+\s-]{10,15}).*?(?:asking|wants?|interested|looking)\s+(?:for\s+)?(.+)"
+    
+    # Pattern 2: "Lead: Name - Number - Product"
+    pattern2 = r"lead[:\s]+([^-]+)\s*-\s*([0-9+\s-]{10,15})\s*-\s*(.+)"
+    
+    # Pattern 3: Simple "Name Number Product"
+    pattern3 = r"inject\s+([^0-9]+)\s+([0-9+\s-]{10,15})\s+(.+)"
+    
+    for pattern in [pattern1, pattern2, pattern3]:
+        match = re.search(pattern, message, re.IGNORECASE)
+        if match:
+            return {
+                "customer_name": match.group(1).strip(),
+                "phone": match.group(2).strip().replace(" ", "").replace("-", ""),
+                "product_interest": match.group(3).strip()
+            }
+    
+    return None
+
+# ============== AI AUTO-REPLY HELPERS ==============
+
+async def generate_ai_reply(customer_id: str, conversation_id: str, message: str) -> str:
+    """Generate AI reply for a customer message"""
+    try:
+        # Load customer context
+        customer = await db.customers.find_one({"id": customer_id}, {"_id": 0})
+        if not customer:
+            return None
+        
+        # Load open topics
+        topics = await db.topics.find(
+            {"customer_id": customer_id, "status": {"$in": ["open", "in_progress"]}},
+            {"_id": 0}
+        ).to_list(10)
+        
+        # Load recent messages
+        recent_messages = await db.messages.find(
+            {"conversation_id": conversation_id},
+            {"_id": 0}
+        ).sort("created_at", -1).limit(10).to_list(10)
+        
+        # Load KB
+        kb_context = await get_kb_context()
+        
+        # Load products for context
+        products = await db.products.find({"is_active": True}, {"_id": 0, "name": 1, "base_price": 1, "category": 1}).to_list(20)
+        products_list = ", ".join([f"{p['name']} (₹{p['base_price']})" for p in products])
+        
+        # Build AI context
+        context = f"""You are a professional sales assistant for an Apple/electronics store. KEEP REPLIES SHORT (1-3 sentences).
+
+CUSTOMER INFO:
+Name: {customer.get('name')} | Phone: {customer.get('phone')} | Total Spent: ₹{customer.get('total_spent', 0)}
+Previous Devices: {json.dumps(customer.get('devices', []))}
+
+OPEN TOPICS: {', '.join([t['title'] for t in topics]) if topics else 'None'}
+
+PRODUCTS AVAILABLE:
+{products_list}
+
+KNOWLEDGE BASE:
+{kb_context if kb_context else "Standard policies apply."}
+
+STRICT RULES:
+1. NEVER reveal you are AI or mention internal systems
+2. NEVER offer discounts - say "Let me check with the team"
+3. NEVER promise delivery dates - say "I'll confirm availability"
+4. Be helpful, brief, professional
+5. If customer seems ready to buy, collect: color preference, storage, delivery address
+6. If unsure, escalate politely
+
+RECENT CHAT:
+{chr(10).join([f"{'Customer' if m['sender_type'] == 'customer' else 'You'}: {m['content']}" for m in reversed(recent_messages[-5:])])}
+
+Customer says: {message}
+
+Reply briefly (1-3 sentences):"""
+
+        # Generate response
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"auto-{conversation_id}",
+            system_message=context
+        ).with_model("openai", "gpt-5.2")
+        
+        user_msg = UserMessage(text=message)
+        response = await chat.send_message(user_msg)
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"AI reply error: {e}")
+        return None
+
+async def send_whatsapp_message(phone: str, message: str) -> bool:
+    """Send a WhatsApp message via the WhatsApp service"""
+    try:
+        response = await asyncio.get_event_loop().run_in_executor(
+            None, 
+            lambda: requests.post(
+                f"{WA_SERVICE_URL}/send",
+                json={"phone": phone, "message": message},
+                timeout=30
+            )
+        )
+        return response.status_code == 200
+    except Exception as e:
+        logger.error(f"Failed to send WhatsApp message: {e}")
+        return False
+
 # ============== HEALTH CHECK ==============
 
 @api_router.get("/")
