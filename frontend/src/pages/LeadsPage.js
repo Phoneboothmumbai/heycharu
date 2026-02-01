@@ -28,9 +28,17 @@ function LeadsPage() {
   var fetchLeads = async function() {
     try {
       var token = localStorage.getItem("token");
+      if (!token) {
+        console.error("No auth token found");
+        setLoading(false);
+        return;
+      }
       var response = await fetch(API_URL + "/api/leads", {
         headers: { "Authorization": "Bearer " + token }
       });
+      if (!response.ok) {
+        throw new Error("Failed to fetch leads: " + response.status);
+      }
       var data = await response.json();
       setLeads(data);
     } catch (error) {
