@@ -68,6 +68,7 @@ function App() {
                       <Route path="/whatsapp" element={<WhatsAppPage />} />
                       <Route path="/leads" element={<LeadsPage />} />
                       <Route path="/excluded-numbers" element={<ExcludedNumbersPage />} />
+                      <Route path="/auto-messages" element={<AutoMessagesPage />} />
                       <Route path="/settings" element={<SettingsPage />} />
                     </Routes>
                   </AppLayout>
