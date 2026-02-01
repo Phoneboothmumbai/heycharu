@@ -2925,16 +2925,39 @@ async def inject_lead_internal(customer_name: str, phone: str, product_interest:
     }
     await db.topics.insert_one(topic)
     
-    # Generate outbound message
+    # Generate outbound message - Natural, human-like greeting
+    settings = await db.settings.find_one({"type": "global"}, {"_id": 0})
+    store_name = settings.get("store_name", "NeoStore") if settings else "NeoStore"
+    
+    # Get customer first name
+    first_name = customer['name'].split()[0] if customer['name'] != "Unknown" else ""
+    greeting = f"Hi {first_name} 👋" if first_name else "Hi there 👋"
+    
+    # Check if product exists in catalog
     product = await db.products.find_one(
         {"name": {"$regex": product_interest, "$options": "i"}, "is_active": True},
         {"_id": 0}
     )
     
     if product:
-        outbound_msg = f"Hi {customer['name'].split()[0]}! This is from the store. I understand you're interested in the {product['name']}. It's available at ₹{product['base_price']:,.0f}. Would you like me to share more details?"
+        outbound_msg = f"""{greeting}
+Thanks for reaching out to {store_name}!
+
+I see you're interested in the {product['name']}.
+It's available at ₹{product['base_price']:,.0f}.
+
+How can I help you today—more details, availability, or anything else?"""
+    elif product_interest and product_interest != "General Inquiry":
+        outbound_msg = f"""{greeting}
+Thanks for reaching out to {store_name}!
+
+I see you're interested in {product_interest}.
+How can I help you today—pricing, availability, or something else?"""
     else:
-        outbound_msg = f"Hi {customer['name'].split()[0]}! This is from the store. I understand you're interested in {product_interest}. I'd be happy to help you with the details. What would you like to know?"
+        outbound_msg = f"""{greeting}
+Thanks for reaching out to {store_name}!
+
+How can I help you today?"""
     
     # Send message
     message_sent = await send_whatsapp_message(phone_clean, outbound_msg)
