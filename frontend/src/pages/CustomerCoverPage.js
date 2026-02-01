@@ -1,0 +1,639 @@
+import { useState, useEffect, useCallback } from "react";
+import { useParams, useNavigate, Link } from "react-router-dom";
+import axios from "axios";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Badge } from "../components/ui/badge";
+import { Avatar, AvatarFallback } from "../components/ui/avatar";
+import { Textarea } from "../components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
+import { toast } from "sonner";
+import { 
+  ArrowLeft, Phone, Mail, MapPin, IndianRupee, Package, ShoppingCart, 
+  MessageSquare, AlertTriangle, Tag, Plus, X, Smartphone, Clock, 
+  CheckCircle, AlertCircle, Ticket, User, Edit2, Save, Eye, EyeOff
+} from "lucide-react";
+
+const API_URL = process.env.REACT_APP_BACKEND_URL;
+
+const StatusColors = {
+  open: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
+  in_progress: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+  resolved: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400",
+  closed: "bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-400",
+  pending: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
+  delivered: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400",
+  processing: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+  escalated: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+};
+
+const TopicTypeColors = {
+  product_inquiry: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+  service_request: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
+  support: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
+  order: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400",
+};
+
+const CustomerCoverPage = () => {
+  const { customerId } = useParams();
+  const navigate = useNavigate();
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [editingNotes, setEditingNotes] = useState(false);
+  const [notes, setNotes] = useState("");
+  const [newTag, setNewTag] = useState("");
+  const [isAddDeviceOpen, setIsAddDeviceOpen] = useState(false);
+  const [deviceForm, setDeviceForm] = useState({ name: "", model: "", serial: "", purchase_date: "" });
+
+  const fetchData = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API_URL}/api/customers/${customerId}/360`);
+      setData(res.data);
+      setNotes(res.data.customer?.notes || "");
+    } catch (e) {
+      toast.error("Failed to load customer data");
+      navigate("/customers");
+    } finally {
+      setLoading(false);
+    }
+  }, [customerId, navigate]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const saveNotes = async () => {
+    try {
+      await axios.put(`${API_URL}/api/customers/${customerId}/notes?notes=${encodeURIComponent(notes)}`);
+      toast.success("Notes saved");
+      setEditingNotes(false);
+      fetchData();
+    } catch (e) {
+      toast.error("Failed to save notes");
+    }
+  };
+
+  const addTag = async () => {
+    if (!newTag.trim()) return;
+    const tags = [...(data.customer?.tags || []), newTag.trim()];
+    try {
+      await axios.put(`${API_URL}/api/customers/${customerId}/tags`, tags);
+      toast.success("Tag added");
+      setNewTag("");
+      fetchData();
+    } catch (e) {
+      toast.error("Failed to add tag");
+    }
+  };
+
+  const removeTag = async (tagToRemove) => {
+    const tags = (data.customer?.tags || []).filter(t => t !== tagToRemove);
+    try {
+      await axios.put(`${API_URL}/api/customers/${customerId}/tags`, tags);
+      toast.success("Tag removed");
+      fetchData();
+    } catch (e) {
+      toast.error("Failed to remove tag");
+    }
+  };
+
+  const addDevice = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post(`${API_URL}/api/customers/${customerId}/devices`, deviceForm);
+      toast.success("Device added");
+      setIsAddDeviceOpen(false);
+      setDeviceForm({ name: "", model: "", serial: "", purchase_date: "" });
+      fetchData();
+    } catch (e) {
+      toast.error("Failed to add device");
+    }
+  };
+
+  const removeDevice = async (index) => {
+    if (!window.confirm("Remove this device?")) return;
+    try {
+      await axios.delete(`${API_URL}/api/customers/${customerId}/devices/${index}`);
+      toast.success("Device removed");
+      fetchData();
+    } catch (e) {
+      toast.error("Failed to remove device");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="skeleton-pulse h-32 rounded-xl" />
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {[1,2,3,4].map(i => <div key={i} className="skeleton-pulse h-24 rounded-xl" />)}
+        </div>
+        <div className="skeleton-pulse h-64 rounded-xl" />
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  const { customer, statistics, active_topics, resolved_topics, orders, tickets, escalations, is_excluded, exclusion_info, lead_info } = data;
+
+  return (
+    <div className="space-y-6 animate-in" data-testid="customer-360-page">
+      {/* Header with back button */}
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="icon" onClick={() => navigate("/customers")} data-testid="back-btn">
+          <ArrowLeft className="w-5 h-5" />
+        </Button>
+        <div className="flex-1">
+          <h1 className="text-2xl font-bold">Customer 360°</h1>
+          <p className="text-muted-foreground">Complete overview of {customer.name}</p>
+        </div>
+      </div>
+
+      {/* Customer Header Card */}
+      <Card className="border-border/50" data-testid="customer-header-card">
+        <CardContent className="p-6">
+          <div className="flex flex-col sm:flex-row gap-6">
+            <Avatar className="w-20 h-20 mx-auto sm:mx-0">
+              <AvatarFallback className="bg-primary/10 text-primary text-3xl">
+                {customer.name?.charAt(0)?.toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 text-center sm:text-left space-y-3">
+              <div>
+                <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
+                  <h2 className="text-2xl font-bold">{customer.name}</h2>
+                  <Badge className={`${customer.customer_type === 'company' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400' : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'}`}>
+                    {customer.customer_type}
+                  </Badge>
+                  {is_excluded && (
+                    <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400">
+                      <EyeOff className="w-3 h-3 mr-1" />Silent Mode
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Customer since {new Date(customer.created_at).toLocaleDateString()}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-4 text-sm">
+                <span className="flex items-center gap-1.5">
+                  <Phone className="w-4 h-4 text-muted-foreground" />{customer.phone}
+                </span>
+                {customer.email && (
+                  <span className="flex items-center gap-1.5">
+                    <Mail className="w-4 h-4 text-muted-foreground" />{customer.email}
+                  </span>
+                )}
+              </div>
+              {customer.addresses?.length > 0 && (
+                <div className="flex items-start gap-1.5 text-sm">
+                  <MapPin className="w-4 h-4 text-muted-foreground mt-0.5" />
+                  <span className="text-muted-foreground">
+                    {customer.addresses[0]?.street}, {customer.addresses[0]?.city}
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="text-center sm:text-right">
+              <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400 flex items-center justify-center sm:justify-end">
+                <IndianRupee className="w-7 h-7" />
+                {(statistics.total_spent || 0).toLocaleString('en-IN')}
+              </p>
+              <p className="text-sm text-muted-foreground">Total Lifetime Value</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4" data-testid="customer-stats">
+        <Card className="p-4 border-border/50">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+              <ShoppingCart className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold">{statistics.total_orders}</p>
+              <p className="text-xs text-muted-foreground">Total Orders</p>
+            </div>
+          </div>
+        </Card>
+        <Card className="p-4 border-border/50">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+              <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold">{statistics.active_topics}</p>
+              <p className="text-xs text-muted-foreground">Active Topics</p>
+            </div>
+          </div>
+        </Card>
+        <Card className="p-4 border-border/50">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+              <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold">{statistics.completed_orders}</p>
+              <p className="text-xs text-muted-foreground">Delivered</p>
+            </div>
+          </div>
+        </Card>
+        <Card className="p-4 border-border/50">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+              <MessageSquare className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold">{statistics.total_conversations}</p>
+              <p className="text-xs text-muted-foreground">Conversations</p>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Exclusion Warning */}
+      {is_excluded && exclusion_info && (
+        <Card className="border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/10">
+          <CardContent className="p-4 flex items-center gap-4">
+            <EyeOff className="w-6 h-6 text-red-600 dark:text-red-400" />
+            <div className="flex-1">
+              <p className="font-medium text-red-800 dark:text-red-300">Silent Monitoring Active</p>
+              <p className="text-sm text-red-600 dark:text-red-400">
+                {exclusion_info.tag}: {exclusion_info.reason || "No reason specified"}
+              </p>
+            </div>
+            <Link to="/excluded-numbers">
+              <Button variant="outline" size="sm">Manage</Button>
+            </Link>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Lead Injection Info */}
+      {lead_info && (
+        <Card className="border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-900/10">
+          <CardContent className="p-4 flex items-center gap-4">
+            <User className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            <div className="flex-1">
+              <p className="font-medium text-blue-800 dark:text-blue-300">Owner-Injected Lead</p>
+              <p className="text-sm text-blue-600 dark:text-blue-400">
+                Interest: {lead_info.product_interest} • Status: {lead_info.status}
+              </p>
+            </div>
+            <Badge className={StatusColors[lead_info.status] || StatusColors.pending}>
+              {lead_info.status}
+            </Badge>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Main Content Tabs */}
+      <Tabs defaultValue="topics" className="space-y-4">
+        <TabsList className="grid grid-cols-4 lg:w-[400px]">
+          <TabsTrigger value="topics" data-testid="tab-topics">Topics</TabsTrigger>
+          <TabsTrigger value="orders" data-testid="tab-orders">Orders</TabsTrigger>
+          <TabsTrigger value="devices" data-testid="tab-devices">Devices</TabsTrigger>
+          <TabsTrigger value="notes" data-testid="tab-notes">Notes</TabsTrigger>
+        </TabsList>
+
+        {/* Topics Tab */}
+        <TabsContent value="topics" className="space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Active Topics */}
+            <Card className="border-border/50">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-500" />
+                  Active Topics ({statistics.active_topics})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {active_topics.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">No active topics</p>
+                ) : (
+                  active_topics.map(topic => (
+                    <div key={topic.id} className="p-3 rounded-lg bg-accent/50 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-medium text-sm">{topic.title}</p>
+                        <Badge className={StatusColors[topic.status]}>{topic.status}</Badge>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className={TopicTypeColors[topic.topic_type]}>
+                          {topic.topic_type?.replace("_", " ")}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(topic.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Resolved Topics */}
+            <Card className="border-border/50">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-emerald-500" />
+                  Resolved Topics ({statistics.resolved_topics})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {resolved_topics.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">No resolved topics</p>
+                ) : (
+                  resolved_topics.slice(0, 5).map(topic => (
+                    <div key={topic.id} className="p-3 rounded-lg bg-accent/50 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-medium text-sm">{topic.title}</p>
+                        <Badge className={StatusColors[topic.status]}>{topic.status}</Badge>
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(topic.updated_at || topic.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Tickets & Escalations */}
+          {(tickets.length > 0 || escalations.length > 0) && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {tickets.length > 0 && (
+                <Card className="border-border/50">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Ticket className="w-4 h-4" />Tickets ({tickets.length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {tickets.slice(0, 5).map(ticket => (
+                      <div key={ticket.id} className="flex items-center justify-between p-2 rounded bg-accent/30">
+                        <div>
+                          <p className="text-sm font-medium">{ticket.ticket_number}</p>
+                          <p className="text-xs text-muted-foreground">{ticket.subject}</p>
+                        </div>
+                        <Badge className={StatusColors[ticket.status]}>{ticket.status}</Badge>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
+
+              {escalations.length > 0 && (
+                <Card className="border-border/50">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-red-500" />Escalations ({escalations.length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {escalations.slice(0, 5).map(esc => (
+                      <div key={esc.id} className="flex items-center justify-between p-2 rounded bg-red-50 dark:bg-red-900/10">
+                        <div>
+                          <p className="text-sm font-medium text-red-800 dark:text-red-300">{esc.reason}</p>
+                          <p className="text-xs text-muted-foreground">{new Date(esc.created_at).toLocaleDateString()}</p>
+                        </div>
+                        <Badge className={StatusColors[esc.status]}>{esc.status}</Badge>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Orders Tab */}
+        <TabsContent value="orders">
+          <Card className="border-border/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Order History</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {orders.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">No orders yet</p>
+              ) : (
+                <div className="space-y-3">
+                  {orders.map(order => (
+                    <div key={order.id} className="p-4 rounded-lg border border-border/50 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium">Order #{order.id.slice(0, 8).toUpperCase()}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(order.created_at).toLocaleDateString()} • {order.items?.length || 0} items
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-bold text-emerald-600 dark:text-emerald-400 flex items-center justify-end">
+                            <IndianRupee className="w-4 h-4" />
+                            {(order.total || 0).toLocaleString('en-IN')}
+                          </p>
+                          <div className="flex gap-2 mt-1">
+                            <Badge className={StatusColors[order.status]}>{order.status}</Badge>
+                            <Badge variant="outline">{order.payment_status}</Badge>
+                          </div>
+                        </div>
+                      </div>
+                      {order.items?.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {order.items.slice(0, 3).map((item, idx) => (
+                            <Badge key={idx} variant="secondary" className="text-xs">
+                              {item.product_name || item.name} x{item.quantity}
+                            </Badge>
+                          ))}
+                          {order.items.length > 3 && (
+                            <Badge variant="secondary" className="text-xs">
+                              +{order.items.length - 3} more
+                            </Badge>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Devices Tab */}
+        <TabsContent value="devices">
+          <Card className="border-border/50">
+            <CardHeader className="pb-3 flex flex-row items-center justify-between">
+              <CardTitle className="text-base">Devices Owned</CardTitle>
+              <Dialog open={isAddDeviceOpen} onOpenChange={setIsAddDeviceOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" data-testid="add-device-btn">
+                    <Plus className="w-4 h-4 mr-1" />Add Device
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader><DialogTitle>Add Device</DialogTitle></DialogHeader>
+                  <form onSubmit={addDevice} className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Device Name *</label>
+                      <Input 
+                        value={deviceForm.name} 
+                        onChange={(e) => setDeviceForm({...deviceForm, name: e.target.value})} 
+                        placeholder="e.g., iPhone 15 Pro Max"
+                        required 
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Model/Variant</label>
+                      <Input 
+                        value={deviceForm.model} 
+                        onChange={(e) => setDeviceForm({...deviceForm, model: e.target.value})} 
+                        placeholder="e.g., 256GB Blue Titanium"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Serial/IMEI</label>
+                      <Input 
+                        value={deviceForm.serial} 
+                        onChange={(e) => setDeviceForm({...deviceForm, serial: e.target.value})} 
+                        placeholder="Serial number"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Purchase Date</label>
+                      <Input 
+                        type="date"
+                        value={deviceForm.purchase_date} 
+                        onChange={(e) => setDeviceForm({...deviceForm, purchase_date: e.target.value})} 
+                      />
+                    </div>
+                    <div className="flex gap-3 pt-2">
+                      <Button type="button" variant="outline" onClick={() => setIsAddDeviceOpen(false)} className="flex-1">Cancel</Button>
+                      <Button type="submit" className="flex-1">Add Device</Button>
+                    </div>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </CardHeader>
+            <CardContent>
+              {(!customer.devices || customer.devices.length === 0) ? (
+                <p className="text-sm text-muted-foreground text-center py-8">No devices recorded</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {customer.devices.map((device, idx) => (
+                    <div key={idx} className="p-4 rounded-lg border border-border/50 flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                        <Smartphone className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium">{device.name}</p>
+                        {device.model && <p className="text-sm text-muted-foreground">{device.model}</p>}
+                        {device.serial && <p className="text-xs text-muted-foreground font-mono">{device.serial}</p>}
+                        {device.purchase_date && (
+                          <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {new Date(device.purchase_date).toLocaleDateString()}
+                          </p>
+                        )}
+                      </div>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                        onClick={() => removeDevice(idx)}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Notes & Tags Tab */}
+        <TabsContent value="notes" className="space-y-4">
+          {/* Tags Section */}
+          <Card className="border-border/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Tag className="w-4 h-4" />Customer Tags
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                {(customer.tags || []).map((tag, idx) => (
+                  <Badge key={idx} variant="secondary" className="px-3 py-1 flex items-center gap-1">
+                    {tag}
+                    <button 
+                      onClick={() => removeTag(tag)} 
+                      className="ml-1 hover:text-red-500"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </Badge>
+                ))}
+                {(!customer.tags || customer.tags.length === 0) && (
+                  <p className="text-sm text-muted-foreground">No tags yet</p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Input 
+                  placeholder="Add a tag..." 
+                  value={newTag} 
+                  onChange={(e) => setNewTag(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && addTag()}
+                  className="flex-1"
+                />
+                <Button onClick={addTag} size="sm">
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Notes Section */}
+          <Card className="border-border/50">
+            <CardHeader className="pb-3 flex flex-row items-center justify-between">
+              <CardTitle className="text-base">Internal Notes</CardTitle>
+              {!editingNotes ? (
+                <Button variant="ghost" size="sm" onClick={() => setEditingNotes(true)}>
+                  <Edit2 className="w-4 h-4 mr-1" />Edit
+                </Button>
+              ) : (
+                <Button size="sm" onClick={saveNotes}>
+                  <Save className="w-4 h-4 mr-1" />Save
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent>
+              {editingNotes ? (
+                <Textarea 
+                  value={notes} 
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Add internal notes about this customer..."
+                  rows={6}
+                  className="resize-none"
+                />
+              ) : (
+                <div className="p-4 rounded-lg bg-accent/50 min-h-[100px]">
+                  {notes ? (
+                    <p className="text-sm whitespace-pre-wrap">{notes}</p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No notes yet. Click Edit to add notes.</p>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+};
+
+export default CustomerCoverPage;
