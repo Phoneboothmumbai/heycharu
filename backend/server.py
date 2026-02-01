@@ -1297,47 +1297,6 @@ async def sync_whatsapp_messages(data: WhatsAppSyncMessages):
 async def simulate_whatsapp_message(phone: str, message: str, user: dict = Depends(get_current_user)):
     """Simulate receiving a WhatsApp message for testing"""
     return await handle_incoming_whatsapp(WhatsAppIncoming(phone=phone, message=message))
-    return {"message": "WhatsApp disconnected"}
-
-@api_router.post("/whatsapp/simulate-message")
-async def simulate_whatsapp_message(phone: str, message: str, user: dict = Depends(get_current_user)):
-    if not whatsapp_state["connected"]:
-        raise HTTPException(status_code=400, detail="WhatsApp not connected")
-    
-    customer = await db.customers.find_one({"phone": phone}, {"_id": 0})
-    if not customer:
-        customer_id = str(uuid.uuid4())
-        now = datetime.now(timezone.utc).isoformat()
-        customer = {
-            "id": customer_id, "name": f"WhatsApp User ({phone})", "phone": phone,
-            "customer_type": "individual", "addresses": [], "preferences": {},
-            "purchase_history": [], "devices": [], "tags": ["whatsapp"], "notes": "",
-            "total_spent": 0.0, "last_interaction": now, "created_at": now
-        }
-        await db.customers.insert_one(customer)
-    
-    conv = await db.conversations.find_one({"customer_id": customer["id"]})
-    if not conv:
-        conv_id = str(uuid.uuid4())
-        now = datetime.now(timezone.utc).isoformat()
-        conv = {
-            "id": conv_id, "customer_id": customer["id"], "customer_name": customer["name"],
-            "customer_phone": phone, "channel": "whatsapp", "status": "active",
-            "last_message": message, "last_message_at": now, "unread_count": 1, "created_at": now
-        }
-        await db.conversations.insert_one(conv)
-    else:
-        await db.conversations.update_one(
-            {"id": conv["id"]},
-            {"$set": {"last_message": message, "last_message_at": datetime.now(timezone.utc).isoformat()}, "$inc": {"unread_count": 1}}
-        )
-    
-    msg_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
-    msg_doc = {"id": msg_id, "conversation_id": conv["id"], "content": message, "sender_type": "customer", "message_type": "text", "attachments": [], "created_at": now}
-    await db.messages.insert_one(msg_doc)
-    
-    return {"message": "Message received", "customer_id": customer["id"], "conversation_id": conv["id"], "message_id": msg_id}
 
 # ============== DASHBOARD ==============
 
