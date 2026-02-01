@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/dialog";
 import { Textarea } from "../components/ui/textarea";
-import { useToast } from "../components/ui/use-toast";
+import { toast } from "sonner";
 import { Rocket, UserPlus, Phone, Package, MessageSquare, Clock, CheckCircle, AlertCircle } from "lucide-react";
 
 var API_URL = process.env.REACT_APP_BACKEND_URL;
