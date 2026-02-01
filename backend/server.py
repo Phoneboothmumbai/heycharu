@@ -576,6 +576,11 @@ async def generate_ai_reply(customer_id: str, conversation_id: str, message: str
         if not customer:
             return None
         
+        # Load settings for AI instructions
+        settings = await db.settings.find_one({"type": "global"}, {"_id": 0})
+        ai_instructions = settings.get("ai_instructions", "") if settings else ""
+        business_name = settings.get("business_name", "our store") if settings else "our store"
+        
         # Get active topic for this customer
         active_topic = await db.topics.find_one(
             {"customer_id": customer_id, "status": {"$in": ["open", "in_progress"]}},
@@ -603,35 +608,35 @@ async def generate_ai_reply(customer_id: str, conversation_id: str, message: str
         if active_topic:
             topic_info = f"Current Topic: {active_topic.get('title', 'General')}"
         
+        # Build custom instructions section
+        custom_instructions = ""
+        if ai_instructions and ai_instructions.strip():
+            custom_instructions = f"""
+BUSINESS INSTRUCTIONS (MUST FOLLOW):
+{ai_instructions}
+"""
+        
         # Simple, focused prompt
-        system_prompt = f"""You are a helpful assistant for an Apple/electronics store. You help with sales and repairs.
-
+        system_prompt = f"""You are a helpful assistant for {business_name}. 
+{custom_instructions}
 CUSTOMER: {customer.get('name', 'Customer')}
 {topic_info}
 
 CONVERSATION SO FAR:
 {conversation_history}
 
-STRICT RULES:
-1. Read the conversation above carefully - DO NOT repeat questions already asked
-2. DO NOT ask for photos, pictures, or videos - we cannot process images
-3. DO NOT ask about budget unless customer specifically mentions price concerns
+RULES:
+1. Read the conversation above - DO NOT repeat questions already asked
+2. DO NOT ask for photos, pictures, or videos
+3. DO NOT ask about budget unless customer mentions price concerns
 4. Keep replies short (1-3 sentences max)
 5. If replying to multiple points, add a blank line between each point
-6. Be conversational and helpful, not robotic
-7. If unsure about something: say "Let me check and get back to you"
-8. NEVER ask the same question twice
-
-FORMATTING:
-- When responding to multiple topics, separate them with a blank line
-- Example:
-  "Yes, we have iPhone 15 Pro in stock.
-
-  For the MacBook repair, our technician can look at it tomorrow."
+6. If unsure: say "Let me check and get back to you"
+7. NEVER ask the same question twice
 
 Customer's new message: "{message}"
 
-Your reply (be helpful, natural, and follow ALL rules above):"""
+Your reply (follow ALL instructions above):"""
 
         # Generate response
         chat = LlmChat(
