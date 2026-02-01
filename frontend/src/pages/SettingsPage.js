@@ -22,6 +22,7 @@ const API_URL = process.env.REACT_APP_BACKEND_URL;
 const SettingsPage = () => {
   const [settings, setSettings] = useState({
     business_name: "Sales Brain",
+    owner_phone: "",
     escalation_phone: "+91 98765 43210",
     follow_up_days: 3,
     ai_enabled: true,
