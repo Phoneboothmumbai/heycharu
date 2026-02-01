@@ -478,14 +478,17 @@ async def create_escalation(customer_id: str, conversation_id: str, reason: str,
 
 async def is_number_excluded(phone: str) -> bool:
     """Check if a phone number is in the exclusion list"""
-    # Normalize phone number
+    # Normalize phone number - remove all non-digits
     normalized = phone.replace("+", "").replace(" ", "").replace("-", "")
     if len(normalized) > 10:
         normalized = normalized[-10:]  # Get last 10 digits
     
+    # Also create patterns for common phone formats
+    # This will match stored phones with different formatting
     excluded = await db.excluded_numbers.find_one({
         "$or": [
             {"phone": {"$regex": normalized}},
+            {"phone": {"$regex": normalized[-10:] if len(normalized) >= 10 else normalized}},
             {"phone": phone}
         ]
     })
@@ -500,6 +503,7 @@ async def get_excluded_number_info(phone: str) -> Optional[Dict]:
     return await db.excluded_numbers.find_one({
         "$or": [
             {"phone": {"$regex": normalized}},
+            {"phone": {"$regex": normalized[-10:] if len(normalized) >= 10 else normalized}},
             {"phone": phone}
         ]
     }, {"_id": 0})
