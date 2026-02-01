@@ -2269,7 +2269,6 @@ async def handle_incoming_whatsapp(data: WhatsAppIncoming):
             # This is from the owner
             
             # CHECK 2a: Is this a reply to an escalation?
-            # Look for pending escalation
             pending_escalation = await db.escalations.find_one(
                 {"status": "pending_owner_reply"},
                 {"_id": 0},
@@ -2277,23 +2276,35 @@ async def handle_incoming_whatsapp(data: WhatsAppIncoming):
             )
             
             if pending_escalation and not data.message.lower().startswith("customer"):
-                # Owner is replying to escalation - forward to customer
+                # Owner is replying to escalation - format and forward to customer
                 customer_phone = pending_escalation.get("customer_phone")
+                customer_name = pending_escalation.get("customer_name", "Customer")
+                
                 if customer_phone:
-                    # Send owner's reply to the customer
-                    await send_whatsapp_message(customer_phone, data.message)
+                    # Format owner's reply professionally
+                    owner_reply = data.message.strip()
+                    
+                    # Clean up the reply - remove any internal notes
+                    formatted_reply = owner_reply
+                    
+                    # If reply is very short/informal, make it slightly more professional
+                    if len(owner_reply) < 50 and not owner_reply.endswith(('.', '!', '?')):
+                        formatted_reply = owner_reply + "."
+                    
+                    # Send formatted reply to the customer
+                    await send_whatsapp_message(customer_phone, formatted_reply)
                     
                     # Mark escalation as resolved
                     await db.escalations.update_one(
                         {"id": pending_escalation["id"]},
                         {"$set": {
                             "status": "resolved",
-                            "owner_reply": data.message,
+                            "owner_reply": owner_reply,
                             "resolved_at": datetime.now(timezone.utc).isoformat()
                         }}
                     )
                     
-                    # Also save message in customer's conversation
+                    # Save message in customer's conversation
                     conv = await db.conversations.find_one(
                         {"customer_phone": {"$regex": customer_phone[-10:]}},
                         {"_id": 0}
@@ -2302,15 +2313,21 @@ async def handle_incoming_whatsapp(data: WhatsAppIncoming):
                         await db.messages.insert_one({
                             "id": str(uuid.uuid4()),
                             "conversation_id": conv["id"],
-                            "content": data.message,
+                            "content": formatted_reply,
                             "sender_type": "agent",
                             "message_type": "text",
                             "attachments": [],
                             "created_at": datetime.now(timezone.utc).isoformat()
                         })
+                        
+                        # Update conversation last message
+                        await db.conversations.update_one(
+                            {"id": conv["id"]},
+                            {"$set": {"last_message": formatted_reply, "last_message_at": datetime.now(timezone.utc).isoformat()}}
+                        )
                     
                     # Confirm to owner
-                    await send_whatsapp_message(phone, f"✓ Reply sent to customer {customer_phone}")
+                    await send_whatsapp_message(phone, f"✓ Sent to {customer_name}")
                     
                     logger.info(f"Owner reply forwarded to customer: {customer_phone}")
                     return {
