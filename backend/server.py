@@ -539,83 +539,92 @@ async def get_excluded_number_info(phone: str) -> Optional[Dict]:
 # ============== OWNER COMMAND PARSING ==============
 
 def parse_lead_injection_command(message: str) -> Optional[Dict]:
-    """Parse owner's lead injection command
-    Examples:
-    - "Customer name Rahul, number 9876543210 is asking for iPhone 15 Pro Max"
-    - "Lead: Priya - 8765432109 - wants MacBook Air"
-    - "Foram 9969528677 wants to buy a iPhone"
-    - "lead inject iPhone 17 CKM 9820983978" (Product Name Phone)
-    - "lead inject Foram wants to buy iPhone 15 Foram 9969528677"
+    """Parse owner's lead injection command - FLEXIBLE FORMAT PARSER
+    
+    Supported Formats:
+    - "lead inject iPhone 17 Foram 9969528677"
+    - "lead inject CKM - 9820983978 AirPods Pro"
+    - "lead inject Rahul 9876543210 MacBook Air M3"
+    - "Lead: Name - Number - Product"
+    - "Customer name X, number Y is asking for Z"
     """
     import re
+    
+    # Check if this is a lead inject message
+    if not re.search(r'lead\s*inject', message, re.IGNORECASE):
+        # Also check other formats
+        if not re.search(r'(customer\s+name|lead\s*:)', message, re.IGNORECASE):
+            return None
     
     # Normalize message - join multiple lines, remove extra spaces
     normalized = ' '.join(message.strip().split())
     
-    # Pattern 0: "lead inject Product Name Phone" (SIMPLEST - check first)
-    pattern0 = r"lead\s+inject\s+(.+?)\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)\s+([0-9]{10,12})$"
-    match0 = re.search(pattern0, normalized, re.IGNORECASE)
-    if match0:
-        product = match0.group(1).strip()
-        product = re.sub(r'^(a|an)\s+', '', product, flags=re.IGNORECASE)
-        return {
-            "customer_name": match0.group(2).strip(),
-            "phone": match0.group(3).strip(),
-            "product_interest": product
-        }
+    # Extract phone number (mandatory)
+    phone_match = re.search(r'(\d{10,12})', normalized)
+    if not phone_match:
+        return None  # No phone = invalid lead
     
-    # Pattern 1: "Customer name XXX, number XXX is asking for YYY"
-    pattern1 = r"(?:customer\s+)?name\s+([^,]+),?\s*(?:number|phone|mobile)?\s*[:\s]*([0-9+\s-]{10,15}).*?(?:asking|wants?|interested|looking)\s+(?:for\s+)?(.+)"
+    phone = phone_match.group(1)
     
-    # Pattern 2: "Lead: Name - Number - Product"
-    pattern2 = r"lead[:\s]+([^-]+)\s*-\s*([0-9+\s-]{10,15})\s*-\s*(.+)"
+    # Remove "lead inject" prefix for easier parsing
+    clean_msg = re.sub(r'lead\s*inject\s*', '', normalized, flags=re.IGNORECASE).strip()
     
-    # Pattern 3: "inject Name Number Product"
-    pattern3 = r"inject\s+([^0-9]+)\s+([0-9+\s-]{10,15})\s+(.+)"
+    # Try to extract name and product
+    # Format 1: "Product Name Phone" - e.g., "iPhone 17 Foram 9969528677"
+    # Format 2: "Name - Phone Product" - e.g., "CKM - 9820983978 AirPods Pro"
+    # Format 3: "Name Phone Product" - e.g., "Rahul 9876543210 MacBook Air M3"
     
-    # Pattern 4: "Name Number wants/interested/looking Product"
-    pattern4 = r"([A-Za-z]+(?:\s+[A-Za-z]+)?)\s+([0-9]{10,12})\s+(?:wants?\s+(?:to\s+)?(?:buy\s+)?|interested\s+(?:in\s+)?|looking\s+(?:for\s+)?)(.+)"
+    # Remove phone from message to separate name and product
+    parts_without_phone = re.sub(r'\s*-?\s*' + phone + r'\s*-?\s*', ' | ', clean_msg).strip()
+    parts = [p.strip() for p in parts_without_phone.split('|') if p.strip()]
     
-    # Pattern 5: "Name wants Product Name Number" (split format)
-    pattern5 = r"([A-Za-z]+)\s+(?:wants?\s+(?:to\s+)?(?:buy\s+)?|interested\s+(?:in\s+)?|looking\s+(?:for\s+)?)([^0-9]+)\s+\1\s+([0-9]{10,12})"
+    customer_name = "Unknown"
+    product_interest = "General Inquiry"
     
-    # Pattern 6: "lead inject Name wants Product Name Number"
-    pattern6 = r"lead\s+inject\s+([A-Za-z]+)\s+(?:wants?\s+(?:to\s+)?(?:buy\s+)?)(.+?)\s+\1\s+([0-9]{10,12})"
-    
-    for pattern in [pattern1, pattern2, pattern3, pattern4, pattern6, pattern5]:
-        match = re.search(pattern, normalized, re.IGNORECASE)
-        if match:
-            if pattern == pattern5 or pattern == pattern6:
-                # Name is in group 1, product in group 2, phone in group 3
-                product = match.group(2).strip()
-                phone = match.group(3).strip()
+    if len(parts) == 2:
+        # Two parts - could be "Product | Name" or "Name | Product"
+        part1, part2 = parts[0], parts[1]
+        
+        # If part1 looks like a product (contains numbers or common product words)
+        product_keywords = ['iphone', 'macbook', 'ipad', 'airpods', 'watch', 'pro', 'max', 'air', 'mini']
+        part1_is_product = any(kw in part1.lower() for kw in product_keywords) or re.search(r'\d', part1)
+        
+        if part1_is_product:
+            product_interest = part1
+            customer_name = part2 if part2 else "Unknown"
+        else:
+            customer_name = part1 if part1 else "Unknown"
+            product_interest = part2 if part2 else "General Inquiry"
+    elif len(parts) == 1:
+        # Single part - try to split by name pattern
+        single = parts[0]
+        # Check if it starts with a name (single word followed by product)
+        name_product = re.match(r'^([A-Za-z]+)\s+(.+)$', single)
+        if name_product:
+            potential_name = name_product.group(1)
+            potential_product = name_product.group(2)
+            # If potential_product looks like a product
+            if any(kw in potential_product.lower() for kw in product_keywords):
+                customer_name = potential_name
+                product_interest = potential_product
             else:
-                product = match.group(3).strip()
-                phone = match.group(2).strip()
-            
-            # Clean up product text - remove "a " or "an " prefix
-            product = re.sub(r'^(a|an)\s+', '', product, flags=re.IGNORECASE)
-            return {
-                "customer_name": match.group(1).strip(),
-                "phone": phone.replace(" ", "").replace("-", ""),
-                "product_interest": product
-            }
+                # Assume the whole thing is product, name unknown
+                product_interest = single
+        else:
+            product_interest = single if single else "General Inquiry"
     
-    # Fallback: Try to extract name, phone and product keywords from message
-    phone_match = re.search(r'([0-9]{10,12})', normalized)
-    name_match = re.search(r'^(?:lead\s+inject\s+)?([A-Za-z]+)', normalized, re.IGNORECASE)
-    product_keywords = re.search(r'(?:wants?\s+(?:to\s+)?(?:buy\s+)?|interested\s+(?:in\s+)?|looking\s+(?:for\s+)?|for\s+)(.+?)(?:\s+[A-Za-z]+\s+[0-9]|$)', normalized, re.IGNORECASE)
+    # Clean up name - remove common prefixes/suffixes
+    customer_name = re.sub(r'^(mr\.?|mrs\.?|ms\.?|dr\.?)\s*', '', customer_name, flags=re.IGNORECASE).strip()
+    customer_name = customer_name.split()[0].capitalize() if customer_name and customer_name != "Unknown" else customer_name
     
-    if phone_match and name_match and product_keywords:
-        product = product_keywords.group(1).strip()
-        product = re.sub(r'^(a|an)\s+', '', product, flags=re.IGNORECASE)
-        return {
-            "customer_name": name_match.group(1).strip(),
-            "phone": phone_match.group(1).strip(),
-            "product_interest": product
-        }
+    # Clean up product
+    product_interest = re.sub(r'^(a|an|the)\s+', '', product_interest, flags=re.IGNORECASE).strip()
     
-    return None
+    return {
+        "customer_name": customer_name,
+        "phone": phone,
+        "product_interest": product_interest
+    }
 
 # ============== AI AUTO-REPLY HELPERS ==============
 
