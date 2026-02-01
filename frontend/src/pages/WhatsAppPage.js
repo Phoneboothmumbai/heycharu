@@ -17,7 +17,8 @@ function WhatsAppPage() {
     phone_number: null,
     qr_code: null,
     status: "loading",
-    sync_progress: { total: 0, synced: 0, status: "idle" }
+    sync_progress: { total: 0, synced: 0, status: "idle" },
+    previewMode: false
   });
   var [loading, setLoading] = useState(true);
   var [testPhone, setTestPhone] = useState("+91 98765 00000");
