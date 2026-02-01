@@ -689,7 +689,7 @@ Your reply (be helpful, natural, and follow ALL rules above):"""
 
 
 async def escalate_to_owner(customer: dict, conversation_history: str, customer_message: str, error_reason: str):
-    """Notify owner via WhatsApp when AI cannot respond"""
+    """Notify owner via WhatsApp when AI cannot respond - with summarized context"""
     try:
         # Get owner phone from settings
         settings = await db.settings.find_one({"type": "owner"}, {"_id": 0})
@@ -699,25 +699,27 @@ async def escalate_to_owner(customer: dict, conversation_history: str, customer_
             logger.warning("No owner phone configured for escalation")
             return
         
-        # Build escalation message
+        # Build escalation message with summary
         customer_name = customer.get("name", "Unknown") if customer else "Unknown"
         customer_phone = customer.get("phone", "Unknown") if customer else "Unknown"
         
-        escalation_msg = f"""🚨 *ESCALATION - AI Needs Help*
+        # Create a brief summary instead of raw history
+        history_lines = conversation_history.split("\n")[-6:]  # Last 6 messages
+        summary = "\n".join(history_lines) if history_lines else "New conversation"
+        
+        escalation_msg = f"""🚨 *Need Your Input*
 
 *Customer:* {customer_name}
 *Phone:* {customer_phone}
 
-*Issue:* {error_reason}
+*Their Question:*
+"{customer_message}"
 
-*Customer's Message:*
-{customer_message}
-
-*Recent Conversation:*
-{conversation_history[-500:]}
+*Quick Context:*
+{summary}
 
 ---
-Reply to this message with your response. I will forward it to the customer."""
+Just reply with your answer - I'll format and send it to them."""
 
         # Send to owner
         await send_whatsapp_message(owner_phone, escalation_msg)
@@ -727,6 +729,7 @@ Reply to this message with your response. I will forward it to the customer."""
             "id": str(uuid.uuid4()),
             "customer_id": customer.get("id") if customer else None,
             "customer_phone": customer_phone,
+            "customer_name": customer_name,
             "reason": error_reason,
             "customer_message": customer_message,
             "status": "pending_owner_reply",
