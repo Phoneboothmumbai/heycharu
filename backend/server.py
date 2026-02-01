@@ -1629,6 +1629,24 @@ async def create_order(order: OrderCreate, user: dict = Depends(get_current_user
         {"$push": {"purchase_history": {"order_id": order_id, "total": total, "date": now}}, "$inc": {"total_spent": total}}
     )
     
+    # AUTO-MESSAGE: Order confirmed + Ticket created
+    conv = await db.conversations.find_one({"id": order.conversation_id}, {"_id": 0})
+    if conv:
+        # Send order confirmation
+        await send_auto_message(
+            customer_id=order.customer_id,
+            conversation_id=order.conversation_id,
+            trigger_type="order_confirmed",
+            template_vars={"amount": f"{total:,.2f}"}
+        )
+        # Send ticket created notification
+        await send_auto_message(
+            customer_id=order.customer_id,
+            conversation_id=order.conversation_id,
+            trigger_type="ticket_created",
+            template_vars={"ticket_id": ticket_doc["ticket_number"]}
+        )
+    
     return OrderResponse(**order_doc)
 
 @api_router.put("/orders/{order_id}/status")
