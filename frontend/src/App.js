@@ -72,6 +72,7 @@ function App() {
                       <Route path="/leads" element={<LeadsPage />} />
                       <Route path="/excluded-numbers" element={<ExcludedNumbersPage />} />
                       <Route path="/auto-messages" element={<AutoMessagesPage />} />
+                      <Route path="/knowledge-base" element={<KnowledgeBasePage />} />
                       <Route path="/settings" element={<SettingsPage />} />
                     </Routes>
                   </AppLayout>
