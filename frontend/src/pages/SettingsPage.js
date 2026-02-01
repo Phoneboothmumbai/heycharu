@@ -29,6 +29,7 @@ const SettingsPage = () => {
     follow_up_days: 3,
     ai_enabled: true,
     auto_reply: true,
+    ai_instructions: "",
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
