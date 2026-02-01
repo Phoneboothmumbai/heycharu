@@ -264,6 +264,12 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
+# ============== HEALTH CHECK ==============
+
+@api_router.get("/")
+async def root():
+    return {"message": "Sales Brain API is running", "status": "healthy"}
+
 # ============== AUTH ROUTES ==============
 
 @api_router.post("/auth/register", response_model=dict)
