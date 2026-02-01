@@ -27,7 +27,7 @@ function LeadsPage() {
 
   var fetchLeads = async function() {
     try {
-      var token = localStorage.getItem("token");
+      var token = localStorage.getItem("sales-brain-token");
       if (!token) {
         console.error("No auth token found");
         setLoading(false);
