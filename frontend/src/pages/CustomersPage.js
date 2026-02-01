@@ -59,12 +59,12 @@ const CustomersPage = () => {
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (id, e) => {
+    e.stopPropagation();
     if (!window.confirm("Delete this customer?")) return;
     try {
       await axios.delete(`${API_URL}/api/customers/${id}`);
       toast.success("Customer deleted");
-      setSelectedCustomer(null);
       fetchCustomers();
     } catch (e) {
       toast.error("Failed to delete");
