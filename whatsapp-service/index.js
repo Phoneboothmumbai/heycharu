@@ -357,6 +357,8 @@ app.post('/disconnect', async (req, res) => {
 
 app.post('/reconnect', async (req, res) => {
     try {
+        console.log('Reconnect requested...');
+        
         // Close existing connection
         if (sock) {
             sock.end();
@@ -365,10 +367,12 @@ app.post('/reconnect', async (req, res) => {
         isReady = false;
         connectedPhone = null;
         currentQR = null;
+        connectionTimestamp = null;  // Reset connection timestamp
         
         // Clear old auth and start fresh
         if (fs.existsSync(AUTH_FOLDER)) {
             fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
+            console.log('Auth folder cleared');
         }
         
         // Reconnect
@@ -376,6 +380,7 @@ app.post('/reconnect', async (req, res) => {
         
         res.json({ success: true, message: 'Reconnecting...' });
     } catch (error) {
+        console.error('Reconnect error:', error.message);
         res.status(500).json({ error: error.message });
     }
 });
