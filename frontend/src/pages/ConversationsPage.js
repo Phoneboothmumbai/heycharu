@@ -229,7 +229,7 @@ const ConversationsPage = () => {
                             AI Response
                           </div>
                         )}
-                        {message.sender_type === "human" && (
+                        {(message.sender_type === "human" || message.sender_type === "agent") && (
                           <div className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 mb-1">
                             <UserIcon className="w-3 h-3" />
                             Human Agent
