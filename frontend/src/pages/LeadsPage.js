@@ -24,7 +24,6 @@ function LeadsPage() {
     notes: ""
   });
   var [submitting, setSubmitting] = useState(false);
-  var { toast } = useToast();
 
   var fetchLeads = async function() {
     try {
