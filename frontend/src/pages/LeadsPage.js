@@ -60,7 +60,7 @@ function LeadsPage() {
 
     setSubmitting(true);
     try {
-      var token = localStorage.getItem("token");
+      var token = localStorage.getItem("sales-brain-token");
       var response = await fetch(API_URL + "/api/leads/inject", {
         method: "POST",
         headers: {
