@@ -55,7 +55,7 @@ const CustomersPage = () => {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [newCustomer, setNewCustomer] = useState({
@@ -222,7 +222,7 @@ const CustomersPage = () => {
             <SelectValue placeholder="All Types" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All Types</SelectItem>
+            <SelectItem value="all">All Types</SelectItem>
             <SelectItem value="individual">Individual</SelectItem>
             <SelectItem value="company">Company</SelectItem>
             <SelectItem value="employee">Employee</SelectItem>
