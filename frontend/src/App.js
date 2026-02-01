@@ -12,8 +12,6 @@ import ProductsPage from "./pages/ProductsPage";
 import OrdersPage from "./pages/OrdersPage";
 import WhatsAppPage from "./pages/WhatsAppPage";
 import SettingsPage from "./pages/SettingsPage";
-import KnowledgeBasePage from "./pages/KnowledgeBasePage";
-import EscalationsPage from "./pages/EscalationsPage";
 
 // Layout
 import AppLayout from "./components/layout/AppLayout";
@@ -65,8 +63,6 @@ function App() {
                       <Route path="/products" element={<ProductsPage />} />
                       <Route path="/orders" element={<OrdersPage />} />
                       <Route path="/whatsapp" element={<WhatsAppPage />} />
-                      <Route path="/knowledge-base" element={<KnowledgeBasePage />} />
-                      <Route path="/escalations" element={<EscalationsPage />} />
                       <Route path="/settings" element={<SettingsPage />} />
                     </Routes>
                   </AppLayout>
