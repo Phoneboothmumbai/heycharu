@@ -543,6 +543,8 @@ def parse_lead_injection_command(message: str) -> Optional[Dict]:
     Examples:
     - "Customer name Rahul, number 9876543210 is asking for iPhone 15 Pro Max"
     - "Lead: Priya - 8765432109 - wants MacBook Air"
+    - "Foram 9969528677 wants to buy a iPhone"
+    - "Rahul 9876543210 interested in MacBook"
     """
     import re
     
@@ -552,16 +554,25 @@ def parse_lead_injection_command(message: str) -> Optional[Dict]:
     # Pattern 2: "Lead: Name - Number - Product"
     pattern2 = r"lead[:\s]+([^-]+)\s*-\s*([0-9+\s-]{10,15})\s*-\s*(.+)"
     
-    # Pattern 3: Simple "Name Number Product"
+    # Pattern 3: "inject Name Number Product"
     pattern3 = r"inject\s+([^0-9]+)\s+([0-9+\s-]{10,15})\s+(.+)"
     
-    for pattern in [pattern1, pattern2, pattern3]:
-        match = re.search(pattern, message, re.IGNORECASE)
+    # Pattern 4: Simple "Name Number wants/interested/looking Product" (NEW)
+    pattern4 = r"^([A-Za-z]+(?:\s+[A-Za-z]+)?)\s+([0-9]{10,12})\s+(?:wants?\s+(?:to\s+)?(?:buy\s+)?|interested\s+(?:in\s+)?|looking\s+(?:for\s+)?)(.+)$"
+    
+    # Pattern 5: "Name Number Product" - very simple (NEW)
+    pattern5 = r"^([A-Za-z]+(?:\s+[A-Za-z]+)?)\s+([0-9]{10,12})\s+(?:for\s+)?([A-Za-z].+)$"
+    
+    for pattern in [pattern1, pattern2, pattern3, pattern4, pattern5]:
+        match = re.search(pattern, message.strip(), re.IGNORECASE)
         if match:
+            product = match.group(3).strip()
+            # Clean up product text - remove "a " or "an " prefix
+            product = re.sub(r'^(a|an)\s+', '', product, flags=re.IGNORECASE)
             return {
                 "customer_name": match.group(1).strip(),
                 "phone": match.group(2).strip().replace(" ", "").replace("-", ""),
-                "product_interest": match.group(3).strip()
+                "product_interest": product
             }
     
     return None
