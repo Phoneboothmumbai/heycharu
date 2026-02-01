@@ -1335,9 +1335,9 @@ async def get_customer_360(customer_id: str, user: dict = Depends(get_current_us
     is_excluded = await is_number_excluded(customer.get("phone", ""))
     exclusion_info = await get_excluded_number_info(customer.get("phone", "")) if is_excluded else None
     
-    # Calculate statistics
+    # Calculate statistics - use customer.total_spent as source of truth (includes historical data)
     total_orders = len(orders)
-    total_spent = sum(o.get("total", 0) for o in orders)
+    total_spent = customer.get("total_spent", 0)  # Use stored total from customer record
     pending_orders = len([o for o in orders if o.get("status") in ["pending", "processing"]])
     completed_orders = len([o for o in orders if o.get("status") == "delivered"])
     
