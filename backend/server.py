@@ -1584,9 +1584,6 @@ async def handle_incoming_whatsapp(data: WhatsAppIncoming):
                 logger.info(f"LEAD INJECTION: Owner command detected - {lead_data}")
                 
                 # Process lead injection
-                # Create a fake user for the API call
-                owner_user = {"name": "Owner (WhatsApp)", "id": "owner"}
-                
                 # Inject the lead
                 lead_result = await inject_lead_internal(
                     customer_name=lead_data["customer_name"],
