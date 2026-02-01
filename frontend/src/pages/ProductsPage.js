@@ -60,7 +60,7 @@ const ProductsPage = () => {
     try {
       const params = new URLSearchParams();
       if (search) params.append("search", search);
-      if (categoryFilter) params.append("category", categoryFilter);
+      if (categoryFilter && categoryFilter !== "all") params.append("category", categoryFilter);
       
       const response = await axios.get(`${API_URL}/api/products?${params}`);
       setProducts(response.data);
