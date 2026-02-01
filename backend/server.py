@@ -1710,9 +1710,33 @@ async def update_ticket_status(ticket_id: str, status: str, user: dict = Depends
     valid_statuses = ["open", "in_progress", "resolved", "closed"]
     if status not in valid_statuses:
         raise HTTPException(status_code=400, detail="Invalid status")
-    result = await db.tickets.update_one({"id": ticket_id}, {"$set": {"status": status}})
-    if result.matched_count == 0:
+    
+    ticket = await db.tickets.find_one({"id": ticket_id}, {"_id": 0})
+    if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
+    
+    old_status = ticket.get("status", "open")
+    await db.tickets.update_one({"id": ticket_id}, {"$set": {"status": status}})
+    
+    # AUTO-MESSAGE: Ticket status updates
+    # Find the customer's conversation
+    order = await db.orders.find_one({"ticket_id": ticket_id}, {"_id": 0})
+    if order and order.get("conversation_id"):
+        if status == "in_progress" and old_status != "in_progress":
+            await send_auto_message(
+                customer_id=ticket["customer_id"],
+                conversation_id=order["conversation_id"],
+                trigger_type="ticket_updated",
+                template_vars={"ticket_id": ticket.get("ticket_number", ticket_id[:8])}
+            )
+        elif status in ["resolved", "closed"] and old_status not in ["resolved", "closed"]:
+            await send_auto_message(
+                customer_id=ticket["customer_id"],
+                conversation_id=order["conversation_id"],
+                trigger_type="ticket_resolved",
+                template_vars={"ticket_id": ticket.get("ticket_number", ticket_id[:8])}
+            )
+    
     return {"message": "Status updated"}
 
 # ============== WHATSAPP (REAL INTEGRATION) ==============
