@@ -243,27 +243,32 @@ class TestExcludedNumbers:
     
     def test_check_excluded_number(self):
         """Test GET /api/excluded-numbers/check/{phone}"""
-        if not test_excluded_number_id:
-            pytest.skip("No excluded number to check")
-        
         headers = {"Authorization": f"Bearer {auth_token}"}
         
-        # Get the excluded number
-        response = requests.get(f"{BASE_URL}/api/excluded-numbers", headers=headers)
-        numbers = response.json()
-        existing = next((n for n in numbers if n["id"] == test_excluded_number_id), None)
+        # First add a number to check
+        test_phone = f"+91 11111 {uuid.uuid4().hex[:5]}"
+        exclude_data = {
+            "phone": test_phone,
+            "tag": "internal",
+            "reason": "Test for check endpoint"
+        }
         
-        if existing:
-            phone = existing["phone"].replace("+", "").replace(" ", "")
-            response = requests.get(f"{BASE_URL}/api/excluded-numbers/check/{phone}", headers=headers)
-            assert response.status_code == 200
-            data = response.json()
-            assert "is_excluded" in data
-            assert data["is_excluded"] == True
-            assert "info" in data
-            print(f"SUCCESS: Number check - is_excluded: {data['is_excluded']}")
-        else:
-            pytest.skip("Could not find excluded number")
+        response = requests.post(f"{BASE_URL}/api/excluded-numbers", json=exclude_data, headers=headers)
+        assert response.status_code == 200
+        added_id = response.json()["id"]
+        
+        # Now check if it's excluded
+        phone_normalized = test_phone.replace("+", "").replace(" ", "")
+        response = requests.get(f"{BASE_URL}/api/excluded-numbers/check/{phone_normalized}", headers=headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert "is_excluded" in data
+        assert data["is_excluded"] == True
+        assert "info" in data
+        print(f"SUCCESS: Number check - is_excluded: {data['is_excluded']}")
+        
+        # Cleanup
+        requests.delete(f"{BASE_URL}/api/excluded-numbers/{added_id}", headers=headers)
     
     def test_check_non_excluded_number(self):
         """Test GET /api/excluded-numbers/check/{phone} for non-excluded number"""
