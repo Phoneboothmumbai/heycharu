@@ -67,18 +67,27 @@ const ConversationsPage = () => {
     setMessageInput("");
 
     try {
-      // Extract phone number from conversation
-      const phone = selectedConversation.customer_phone?.replace(/[^0-9]/g, '') || '';
+      // Extract phone number from conversation - clean it
+      let phone = selectedConversation.customer_phone?.replace(/[^0-9]/g, '') || '';
+      
+      // Ensure phone is properly formatted (last 10 digits with 91 prefix)
+      if (phone.length > 10) {
+        phone = '91' + phone.slice(-10);
+      } else if (phone.length === 10) {
+        phone = '91' + phone;
+      }
       
       // Send to WhatsApp first
-      if (phone) {
+      if (phone && phone.length >= 12) {
         try {
           await axios.post(`${API_URL}/api/whatsapp/send?phone=${encodeURIComponent(phone)}&message=${encodeURIComponent(userMessage)}`);
           toast.success("Message sent to WhatsApp");
         } catch (waError) {
           console.error("WhatsApp send failed:", waError);
-          toast.error("Failed to send via WhatsApp - check connection");
+          toast.error("WhatsApp send failed - message saved locally");
         }
+      } else {
+        toast.warning("Invalid phone number - message saved locally only");
       }
 
       // Save message to database
