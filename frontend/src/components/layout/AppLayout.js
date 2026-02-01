@@ -5,7 +5,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { Button } from "../ui/button";
 import { Avatar, AvatarFallback } from "../ui/avatar";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
-import { LayoutDashboard, Users, MessageSquare, Package, ShoppingCart, Settings, Sun, Moon, LogOut, Menu, X, Brain, Smartphone } from "lucide-react";
+import { LayoutDashboard, Users, MessageSquare, Package, ShoppingCart, Settings, Sun, Moon, LogOut, Menu, X, Brain, Smartphone, Rocket, EyeOff } from "lucide-react";
 
 var navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
@@ -14,6 +14,8 @@ var navItems = [
   { icon: Package, label: "Products", path: "/products" },
   { icon: ShoppingCart, label: "Orders", path: "/orders" },
   { icon: Smartphone, label: "WhatsApp", path: "/whatsapp" },
+  { icon: Rocket, label: "Lead Injection", path: "/leads" },
+  { icon: EyeOff, label: "Excluded Numbers", path: "/excluded-numbers" },
   { icon: Settings, label: "Settings", path: "/settings" },
 ];
 
