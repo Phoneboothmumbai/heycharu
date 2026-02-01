@@ -65,6 +65,8 @@ function App() {
                       <Route path="/products" element={<ProductsPage />} />
                       <Route path="/orders" element={<OrdersPage />} />
                       <Route path="/whatsapp" element={<WhatsAppPage />} />
+                      <Route path="/leads" element={<LeadsPage />} />
+                      <Route path="/excluded-numbers" element={<ExcludedNumbersPage />} />
                       <Route path="/settings" element={<SettingsPage />} />
                     </Routes>
                   </AppLayout>
