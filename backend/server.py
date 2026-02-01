@@ -1902,11 +1902,19 @@ class WhatsAppIncoming(BaseModel):
     timestamp: Optional[int] = None
     messageId: Optional[str] = None
     hasMedia: bool = False
+    isHistorical: bool = False  # True = read-only (before connection), False = eligible for AI reply
+
+class WhatsAppConnected(BaseModel):
+    phone: str
+    connectionTimestamp: int
 
 class WhatsAppSyncMessages(BaseModel):
     phone: str
     chatName: Optional[str] = None
     messages: List[Dict[str, Any]]
+
+# Global: Store the WhatsApp connection timestamp
+whatsapp_connection_timestamp = None
 
 @api_router.get("/whatsapp/status")
 async def get_whatsapp_status(user: dict = Depends(get_current_user)):
