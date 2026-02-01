@@ -28,6 +28,36 @@ let connectedPhone = null;
 let syncProgress = { total: 0, synced: 0, status: 'idle' };
 let connectionStatus = 'disconnected';
 
+// CRITICAL: Connection timestamp - only messages AFTER this time get AI replies
+let connectionTimestamp = null;
+
+// Helper: Format phone number correctly
+function formatPhoneNumber(phone) {
+    // Remove all non-digits
+    let clean = phone.replace(/[^0-9]/g, '');
+    
+    // Handle WhatsApp JID format
+    if (clean.includes('@')) {
+        clean = clean.split('@')[0];
+    }
+    
+    // Remove leading zeros
+    clean = clean.replace(/^0+/, '');
+    
+    // If it's just 10 digits, assume India (+91)
+    if (clean.length === 10) {
+        clean = '91' + clean;
+    }
+    
+    // If it starts with 91 and is 12 digits, it's valid
+    // Otherwise, take last 10 digits and prefix with 91
+    if (clean.length > 12) {
+        clean = '91' + clean.slice(-10);
+    }
+    
+    return clean;
+}
+
 // Initialize Baileys
 async function initializeBaileys() {
     try {
