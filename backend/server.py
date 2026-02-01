@@ -1981,6 +1981,7 @@ async def get_settings(user: dict = Depends(get_current_user)):
         settings = {
             "type": "global",
             "business_name": "Sales Brain",
+            "owner_phone": "",
             "escalation_phone": "+91 98765 43210",
             "follow_up_days": 3,
             "ai_enabled": True,
@@ -1988,6 +1989,9 @@ async def get_settings(user: dict = Depends(get_current_user)):
             "inactivity_summary_minutes": 30
         }
         await db.settings.insert_one(settings)
+    # Ensure owner_phone exists for backward compatibility
+    if "owner_phone" not in settings:
+        settings["owner_phone"] = ""
     return settings
 
 @api_router.put("/settings")
