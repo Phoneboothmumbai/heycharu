@@ -632,19 +632,19 @@ REPAIR FLOW - ALLOWED QUESTIONS ONLY:
 
 REPAIR FLOW - NEVER ASK:
 - RAM/storage/color questions
+- Budget questions
 - Product availability
-- New purchase questions
-- Price comparisons for new devices"""
+- New purchase questions"""
         
         sales_allowed_questions = """
 SALES FLOW - ALLOWED QUESTIONS:
+- What product are you looking for?
 - What storage capacity do you need?
 - Any color preference?
-- What's your budget range?
-- Is this for personal or business use?
 - Delivery address?
 
 SALES FLOW - NEVER ASK:
+- Budget (unless customer mentions price concern)
 - Repair diagnostic questions
 - What's broken/damaged questions"""
         
@@ -654,7 +654,7 @@ SALES FLOW - NEVER ASK:
         elif flow_type == "sales":
             flow_instructions = sales_allowed_questions
         else:
-            flow_instructions = "Ask clarifying questions to understand customer needs."
+            flow_instructions = "Understand what the customer needs. Ask ONE clarifying question. Do NOT ask about budget."
         
         # Load KB
         kb_context = await get_kb_context()
