@@ -6,30 +6,10 @@ import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
 import { ScrollArea } from "../components/ui/scroll-area";
-import { Separator } from "../components/ui/separator";
 import { toast } from "sonner";
-import {
-  Search,
-  Send,
-  Paperclip,
-  Phone,
-  MoreVertical,
-  Bot,
-  User as UserIcon,
-  AlertCircle,
-  Sparkles,
-  X,
-  MessageSquare,
-} from "lucide-react";
+import { Search, Send, Phone, MessageSquare, Sparkles, User as UserIcon } from "lucide-react";
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
-
-const TopicTypeColors = {
-  product_inquiry: "topic-pill product_inquiry",
-  service_request: "topic-pill service_request",
-  support: "topic-pill support",
-  order: "topic-pill order",
-};
 
 const ConversationsPage = () => {
   const [conversations, setConversations] = useState([]);
@@ -52,12 +32,8 @@ const ConversationsPage = () => {
   }, [selectedConversation]);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  }, [messages]);
 
   const fetchConversations = async () => {
     try {
@@ -91,7 +67,6 @@ const ConversationsPage = () => {
     setMessageInput("");
 
     try {
-      // Send human message
       await axios.post(`${API_URL}/api/conversations/${selectedConversation.id}/messages`, {
         conversation_id: selectedConversation.id,
         content: userMessage,
@@ -99,14 +74,12 @@ const ConversationsPage = () => {
         message_type: "text",
       });
 
-      // Get AI response
       const aiResponse = await axios.post(`${API_URL}/api/ai/chat`, {
         customer_id: selectedConversation.customer_id,
         conversation_id: selectedConversation.id,
         message: userMessage,
       });
 
-      // Save AI response
       await axios.post(`${API_URL}/api/conversations/${selectedConversation.id}/messages`, {
         conversation_id: selectedConversation.id,
         content: aiResponse.data.response,
@@ -118,9 +91,7 @@ const ConversationsPage = () => {
       fetchConversations();
 
       if (aiResponse.data.needs_escalation) {
-        toast.warning("This conversation may need human attention", {
-          description: "Customer might need escalation to Charu",
-        });
+        toast.warning("This conversation may need human attention");
       }
     } catch (error) {
       toast.error("Failed to send message");
@@ -176,8 +147,8 @@ const ConversationsPage = () => {
                   <div
                     key={conv.id}
                     onClick={() => setSelectedConversation(conv)}
-                    className={`conversation-item ${
-                      selectedConversation?.id === conv.id ? "active" : ""
+                    className={`flex items-start gap-3 p-4 cursor-pointer transition-colors hover:bg-accent ${
+                      selectedConversation?.id === conv.id ? "bg-primary/5 border-l-2 border-primary" : ""
                     }`}
                     data-testid={`conversation-item-${conv.id}`}
                   >
@@ -197,7 +168,7 @@ const ConversationsPage = () => {
                         {conv.last_message || "No messages"}
                       </p>
                       <div className="flex items-center gap-2 mt-2">
-                        <Badge variant="outline" className="text-xs whatsapp-accent">
+                        <Badge variant="outline" className="text-xs text-[#25D366]">
                           WhatsApp
                         </Badge>
                         {conv.unread_count > 0 && (
@@ -217,46 +188,23 @@ const ConversationsPage = () => {
       <Card className="flex-1 border-border/50 flex flex-col min-w-0 hidden md:flex">
         {selectedConversation ? (
           <>
-            {/* Chat Header */}
             <CardHeader className="py-4 px-6 border-b border-border flex-shrink-0">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Avatar className="w-10 h-10">
-                    <AvatarFallback className="bg-[#25D366]/10 text-[#25D366]">
-                      {selectedConversation.customer_name?.charAt(0)?.toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <h3 className="font-semibold">{selectedConversation.customer_name}</h3>
-                    <p className="text-sm text-muted-foreground flex items-center gap-1">
-                      <Phone className="w-3 h-3" />
-                      {selectedConversation.customer_phone}
-                    </p>
-                  </div>
+              <div className="flex items-center gap-3">
+                <Avatar className="w-10 h-10">
+                  <AvatarFallback className="bg-[#25D366]/10 text-[#25D366]">
+                    {selectedConversation.customer_name?.charAt(0)?.toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <h3 className="font-semibold">{selectedConversation.customer_name}</h3>
+                  <p className="text-sm text-muted-foreground flex items-center gap-1">
+                    <Phone className="w-3 h-3" />
+                    {selectedConversation.customer_phone}
+                  </p>
                 </div>
-                <Button variant="ghost" size="icon">
-                  <MoreVertical className="w-5 h-5" />
-                </Button>
               </div>
-
-              {/* Open Topics */}
-              {selectedConversation.topics?.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-3">
-                  {selectedConversation.topics
-                    .filter((t) => t.status !== "resolved")
-                    .map((topic) => (
-                      <span
-                        key={topic.id}
-                        className={TopicTypeColors[topic.topic_type] || "topic-pill"}
-                      >
-                        {topic.title}
-                      </span>
-                    ))}
-                </div>
-              )}
             </CardHeader>
 
-            {/* Messages */}
             <CardContent className="flex-1 p-6 overflow-hidden">
               <ScrollArea className="h-full pr-4">
                 <div className="space-y-4">
@@ -268,7 +216,13 @@ const ConversationsPage = () => {
                       }`}
                     >
                       <div
-                        className={`chat-bubble ${message.sender_type}`}
+                        className={`max-w-[70%] p-3 rounded-xl ${
+                          message.sender_type === "customer"
+                            ? "bg-slate-100 dark:bg-slate-800 rounded-bl-none"
+                            : message.sender_type === "ai"
+                            ? "bg-primary/10 dark:bg-primary/20 rounded-br-none"
+                            : "bg-emerald-100 dark:bg-emerald-900/30 rounded-br-none"
+                        }`}
                         data-testid={`message-${message.id}`}
                       >
                         {message.sender_type === "ai" && (
@@ -295,12 +249,8 @@ const ConversationsPage = () => {
               </ScrollArea>
             </CardContent>
 
-            {/* Message Input */}
-            <div className="message-input-container">
-              <form onSubmit={handleSendMessage} className="flex items-end gap-3 w-full">
-                <Button type="button" variant="ghost" size="icon" className="flex-shrink-0">
-                  <Paperclip className="w-5 h-5" />
-                </Button>
+            <div className="p-4 bg-card border-t border-border">
+              <form onSubmit={handleSendMessage} className="flex items-center gap-3">
                 <Input
                   placeholder="Type a message..."
                   value={messageInput}
@@ -311,7 +261,7 @@ const ConversationsPage = () => {
                 />
                 <Button
                   type="submit"
-                  className="btn-primary flex-shrink-0"
+                  className="btn-primary"
                   disabled={sending || !messageInput.trim()}
                   data-testid="send-message-btn"
                 >
@@ -336,84 +286,6 @@ const ConversationsPage = () => {
           </div>
         )}
       </Card>
-
-      {/* Context Panel - Hidden on smaller screens */}
-      {selectedConversation && (
-        <Card className="w-80 flex-shrink-0 border-border/50 hidden xl:flex flex-col">
-          <CardHeader className="py-4 border-b border-border">
-            <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-              Customer Intelligence
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 flex-1 overflow-auto">
-            <div className="space-y-6">
-              {/* Quick Stats */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 bg-accent rounded-lg text-center">
-                  <p className="text-2xl font-bold text-primary">{messages.length}</p>
-                  <p className="text-xs text-muted-foreground">Messages</p>
-                </div>
-                <div className="p-3 bg-accent rounded-lg text-center">
-                  <p className="text-2xl font-bold text-amber-500">
-                    {selectedConversation.topics?.filter((t) => t.status !== "resolved").length || 0}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Open Topics</p>
-                </div>
-              </div>
-
-              {/* Topics List */}
-              <div>
-                <h4 className="text-sm font-semibold mb-3">Active Topics</h4>
-                {selectedConversation.topics?.length > 0 ? (
-                  <div className="space-y-2">
-                    {selectedConversation.topics.map((topic) => (
-                      <div
-                        key={topic.id}
-                        className="p-3 bg-accent rounded-lg"
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className={TopicTypeColors[topic.topic_type] || "topic-pill"}>
-                            {topic.topic_type.replace("_", " ")}
-                          </span>
-                          <Badge
-                            variant="outline"
-                            className={
-                              topic.status === "open"
-                                ? "status-active"
-                                : topic.status === "resolved"
-                                ? "status-closed"
-                                : "status-pending"
-                            }
-                          >
-                            {topic.status}
-                          </Badge>
-                        </div>
-                        <p className="text-sm font-medium">{topic.title}</p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No active topics</p>
-                )}
-              </div>
-
-              {/* AI Insights */}
-              <div>
-                <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-primary" />
-                  AI Insights
-                </h4>
-                <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg">
-                  <p className="text-sm">
-                    This customer is engaged in an active product inquiry. 
-                    AI is handling the conversation with persistent context.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 };
