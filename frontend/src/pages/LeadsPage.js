@@ -93,7 +93,7 @@ function LeadsPage() {
 
   var updateLeadStatus = async function(leadId, newStatus) {
     try {
-      var token = localStorage.getItem("token");
+      var token = localStorage.getItem("sales-brain-token");
       await fetch(API_URL + "/api/leads/" + leadId + "/status?status=" + newStatus, {
         method: "PUT",
         headers: { "Authorization": "Bearer " + token }
