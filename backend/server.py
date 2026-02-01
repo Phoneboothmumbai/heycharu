@@ -819,8 +819,11 @@ Your reply (if you don't know pricing/availability, start with "ESCALATE:"):"""
 async def escalate_to_owner(customer: dict, conversation_history: str, customer_message: str, error_reason: str):
     """Notify owner via WhatsApp when AI cannot respond - with summarized context"""
     try:
-        # Get owner phone from settings
-        settings = await db.settings.find_one({"type": "owner"}, {"_id": 0})
+        # Get owner phone from settings (check both "global" and "owner" types)
+        settings = await db.settings.find_one({"type": "global"}, {"_id": 0})
+        if not settings:
+            settings = await db.settings.find_one({"type": "owner"}, {"_id": 0})
+        
         owner_phone = settings.get("owner_phone") if settings else None
         
         if not owner_phone:
