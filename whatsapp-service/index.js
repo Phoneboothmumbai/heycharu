@@ -188,26 +188,41 @@ async function connectToWhatsApp() {
                 // Skip own messages and status updates
                 if (msg.key.fromMe || msg.key.remoteJid === 'status@broadcast') continue;
                 
-                const phone = msg.key.remoteJid.replace('@s.whatsapp.net', '').replace('@g.us', '');
+                // Format phone number correctly
+                const rawPhone = msg.key.remoteJid.replace('@s.whatsapp.net', '').replace('@g.us', '');
+                const phone = formatPhoneNumber(rawPhone);
+                
                 const content = msg.message?.conversation || 
                                msg.message?.extendedTextMessage?.text ||
                                msg.message?.imageMessage?.caption ||
                                '[Media message]';
                 
-                console.log('Incoming message from:', phone, '-', content.substring(0, 50));
+                // Get message timestamp (Unix seconds)
+                const msgTimestamp = parseInt(msg.messageTimestamp) || Math.floor(Date.now() / 1000);
                 
-                // Forward to backend
+                // CRITICAL: Check if this is a historical message (before connection)
+                const isHistorical = connectionTimestamp && msgTimestamp < connectionTimestamp;
+                
+                console.log(`Incoming message from: ${phone} - ${content.substring(0, 50)}`);
+                console.log(`  Message timestamp: ${msgTimestamp}, Connection timestamp: ${connectionTimestamp}`);
+                console.log(`  Is historical (read-only): ${isHistorical}`);
+                
+                // Forward to backend with historical flag
                 try {
-                    await axios.post(`${BACKEND_URL}/api/whatsapp/incoming`, {
+                    const response = await axios.post(`${BACKEND_URL}/api/whatsapp/incoming`, {
                         phone: phone,
                         message: content,
-                        timestamp: msg.messageTimestamp,
+                        timestamp: msgTimestamp,
                         messageId: msg.key.id,
-                        hasMedia: !!(msg.message?.imageMessage || msg.message?.videoMessage || msg.message?.audioMessage)
+                        hasMedia: !!(msg.message?.imageMessage || msg.message?.videoMessage || msg.message?.audioMessage),
+                        isHistorical: isHistorical  // Backend will NOT auto-reply if true
                     });
-                    console.log('Message forwarded to backend');
+                    console.log('Message forwarded to backend:', response.data?.mode || 'normal');
                 } catch (err) {
                     console.error('Failed to forward message:', err.message);
+                    if (err.response) {
+                        console.error('Backend error:', err.response.data);
+                    }
                 }
             }
         });
