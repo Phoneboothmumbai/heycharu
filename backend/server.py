@@ -738,6 +738,218 @@ async def update_escalation_status(escalation_id: str, status: str, user: dict =
         raise HTTPException(status_code=404, detail="Escalation not found")
     return {"message": "Status updated"}
 
+# ============== EXCLUDED NUMBERS ROUTES (Silent Monitoring) ==============
+
+@api_router.get("/excluded-numbers", response_model=List[ExcludedNumberResponse])
+async def get_excluded_numbers(tag: Optional[str] = None, user: dict = Depends(get_current_user)):
+    """Get all excluded numbers"""
+    query = {}
+    if tag:
+        query["tag"] = tag
+    numbers = await db.excluded_numbers.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return [ExcludedNumberResponse(**n) for n in numbers]
+
+@api_router.post("/excluded-numbers", response_model=ExcludedNumberResponse)
+async def add_excluded_number(data: ExcludedNumberCreate, user: dict = Depends(get_current_user)):
+    """Add a number to exclusion list (silent monitoring)"""
+    # Check if already excluded
+    existing = await is_number_excluded(data.phone)
+    if existing:
+        raise HTTPException(status_code=400, detail="Number already excluded")
+    
+    number_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    
+    doc = {
+        "id": number_id,
+        "phone": data.phone,
+        "tag": data.tag,
+        "reason": data.reason,
+        "is_temporary": data.is_temporary,
+        "created_at": now,
+        "created_by": user["name"]
+    }
+    await db.excluded_numbers.insert_one(doc)
+    logger.info(f"Number excluded: {data.phone} - Tag: {data.tag} - By: {user['name']}")
+    return ExcludedNumberResponse(**doc)
+
+@api_router.delete("/excluded-numbers/{number_id}")
+async def remove_excluded_number(number_id: str, user: dict = Depends(get_current_user)):
+    """Remove a number from exclusion list"""
+    result = await db.excluded_numbers.delete_one({"id": number_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Number not found")
+    logger.info(f"Number exclusion removed: {number_id}")
+    return {"message": "Number removed from exclusion list"}
+
+@api_router.get("/excluded-numbers/check/{phone}")
+async def check_excluded_number(phone: str, user: dict = Depends(get_current_user)):
+    """Check if a specific number is excluded"""
+    is_excluded = await is_number_excluded(phone)
+    info = await get_excluded_number_info(phone) if is_excluded else None
+    return {
+        "phone": phone,
+        "is_excluded": is_excluded,
+        "info": info
+    }
+
+# ============== LEAD INJECTION ROUTES (Owner-Initiated Leads) ==============
+
+@api_router.get("/leads", response_model=List[LeadInjectionResponse])
+async def get_leads(status: Optional[str] = None, user: dict = Depends(get_current_user)):
+    """Get all injected leads"""
+    query = {}
+    if status:
+        query["status"] = status
+    leads = await db.lead_injections.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return [LeadInjectionResponse(**l) for l in leads]
+
+@api_router.post("/leads/inject", response_model=LeadInjectionResponse)
+async def inject_lead(data: LeadInjectionCreate, user: dict = Depends(get_current_user)):
+    """
+    Owner-initiated lead injection.
+    Creates customer, conversation, topic and sends first outbound message.
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    
+    # Normalize phone
+    phone = data.phone.replace(" ", "").replace("-", "")
+    if not phone.startswith("+"):
+        if len(phone) == 10:
+            phone = "+91" + phone
+        elif phone.startswith("91") and len(phone) == 12:
+            phone = "+" + phone
+    phone_formatted = f"{phone[:3]} {phone[3:8]} {phone[8:]}" if len(phone) >= 13 else phone
+    
+    # Step 1: Create or find customer
+    existing_customer = await db.customers.find_one({"phone": {"$regex": phone[-10:]}}, {"_id": 0})
+    
+    if existing_customer:
+        customer = existing_customer
+        customer_id = customer["id"]
+        logger.info(f"Lead injection: Found existing customer {customer['name']}")
+    else:
+        customer_id = str(uuid.uuid4())
+        customer = {
+            "id": customer_id,
+            "name": data.customer_name,
+            "phone": phone_formatted,
+            "customer_type": "individual",
+            "addresses": [],
+            "preferences": {"communication": "whatsapp"},
+            "purchase_history": [],
+            "devices": [],
+            "tags": ["lead", "owner-injected"],
+            "notes": f"Lead injected by {user['name']}: {data.product_interest}",
+            "total_spent": 0.0,
+            "last_interaction": now,
+            "created_at": now
+        }
+        await db.customers.insert_one(customer)
+        logger.info(f"Lead injection: Created new customer {data.customer_name}")
+    
+    # Step 2: Create conversation
+    conv_id = str(uuid.uuid4())
+    conv = {
+        "id": conv_id,
+        "customer_id": customer_id,
+        "customer_name": customer["name"],
+        "customer_phone": customer["phone"],
+        "channel": "whatsapp",
+        "status": "active",
+        "last_message": None,
+        "last_message_at": now,
+        "unread_count": 0,
+        "source": "owner-injected",
+        "created_at": now
+    }
+    await db.conversations.insert_one(conv)
+    
+    # Step 3: Create topic
+    topic_id = str(uuid.uuid4())
+    topic = {
+        "id": topic_id,
+        "conversation_id": conv_id,
+        "customer_id": customer_id,
+        "topic_type": "product_inquiry",
+        "title": f"Interest in {data.product_interest}",
+        "status": "open",
+        "device_info": None,
+        "metadata": {"product": data.product_interest, "source": "owner-injected"},
+        "created_at": now,
+        "updated_at": now
+    }
+    await db.topics.insert_one(topic)
+    
+    # Step 4: Generate and send outbound message
+    # Find product details
+    product = await db.products.find_one(
+        {"name": {"$regex": data.product_interest, "$options": "i"}, "is_active": True},
+        {"_id": 0}
+    )
+    
+    if product:
+        outbound_msg = f"Hi {customer['name'].split()[0]}! This is from the store. I understand you're interested in the {product['name']}. It's available at ₹{product['base_price']:,.0f}. Would you like me to share more details about specifications and availability?"
+    else:
+        outbound_msg = f"Hi {customer['name'].split()[0]}! This is from the store. I understand you're interested in {data.product_interest}. I'd be happy to help you with the details. What specifically would you like to know?"
+    
+    # Send via WhatsApp
+    message_sent = await send_whatsapp_message(phone, outbound_msg)
+    
+    if message_sent:
+        # Store the outbound message
+        msg_id = str(uuid.uuid4())
+        msg_doc = {
+            "id": msg_id,
+            "conversation_id": conv_id,
+            "topic_id": topic_id,
+            "content": outbound_msg,
+            "sender_type": "ai",
+            "message_type": "text",
+            "attachments": [],
+            "created_at": now
+        }
+        await db.messages.insert_one(msg_doc)
+        
+        # Update conversation
+        await db.conversations.update_one(
+            {"id": conv_id},
+            {"$set": {"last_message": outbound_msg, "last_message_at": now}}
+        )
+        logger.info(f"Lead injection: Outbound message sent to {phone}")
+    else:
+        logger.warning(f"Lead injection: Failed to send outbound message to {phone}")
+    
+    # Step 5: Create lead injection record
+    lead_id = str(uuid.uuid4())
+    lead = {
+        "id": lead_id,
+        "customer_id": customer_id,
+        "customer_name": customer["name"],
+        "phone": phone,
+        "product_interest": data.product_interest,
+        "conversation_id": conv_id,
+        "topic_id": topic_id,
+        "outbound_message_sent": message_sent,
+        "status": "in_progress" if message_sent else "pending",
+        "notes": data.notes,
+        "created_at": now,
+        "created_by": user["name"]
+    }
+    await db.lead_injections.insert_one(lead)
+    
+    return LeadInjectionResponse(**lead)
+
+@api_router.put("/leads/{lead_id}/status")
+async def update_lead_status(lead_id: str, status: str, user: dict = Depends(get_current_user)):
+    """Update lead status"""
+    if status not in ["pending", "in_progress", "completed", "escalated"]:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    result = await db.lead_injections.update_one({"id": lead_id}, {"$set": {"status": status}})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    return {"message": "Status updated"}
+
 # ============== CONVERSATION SUMMARIES ROUTES ==============
 
 @api_router.get("/summaries", response_model=List[ConversationSummaryResponse])
