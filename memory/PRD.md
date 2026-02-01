@@ -127,6 +127,7 @@ ai_uncertain: "Let me check this and get back to you shortly."
 - [x] ~~Lead Injection~~ DONE
 - [x] ~~Number Exclusion~~ DONE
 - [x] ~~Auto-Messaging MVP~~ DONE
+- [x] ~~Customer 360° Cover View~~ DONE
 - [ ] Real osTicket API integration
 
 ### P1 - High Priority
@@ -154,6 +155,12 @@ ai_uncertain: "Let me check this and get back to you shortly."
 3. **Follow-up Scheduler** - Manual only (no background job yet)
 
 ## Changelog
+
+### February 1, 2026 (Session 3)
+- **NEW**: Customer 360° Cover View - comprehensive single-page customer dashboard
+- Shows customer header, stats, topics, orders, devices, tags, notes
+- Integrated with Lead Injection and Silent Monitoring status
+- Navigation from customers list via row click or View 360° button
 
 ### February 1, 2026 (Session 2)
 - **NEW**: Auto-Messaging system with triggers for orders, payments, tickets
