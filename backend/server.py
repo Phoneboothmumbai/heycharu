@@ -1508,8 +1508,8 @@ async def reconnect_whatsapp(user: dict = Depends(get_current_user)):
         return {"error": str(e)}
 
 @api_router.post("/whatsapp/send")
-async def send_whatsapp_message(phone: str, message: str, user: dict = Depends(get_current_user)):
-    """Send message via WhatsApp"""
+async def api_send_whatsapp_message(phone: str, message: str, user: dict = Depends(get_current_user)):
+    """Send message via WhatsApp (API route)"""
     try:
         response = await asyncio.get_event_loop().run_in_executor(
             None, lambda: requests.post(f"{WA_SERVICE_URL}/send", json={"phone": phone, "message": message}, timeout=30)
