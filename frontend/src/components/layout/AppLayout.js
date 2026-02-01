@@ -1,10 +1,10 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useAuth } from "../../contexts/AuthContext";
 import { Button } from "../ui/button";
 import { Avatar, AvatarFallback } from "../ui/avatar";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "../ui/dropdown-menu";
+import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 import { LayoutDashboard, Users, MessageSquare, Package, ShoppingCart, Settings, Sun, Moon, LogOut, Menu, X, Brain, Smartphone } from "lucide-react";
 
 const navItems = [
@@ -17,70 +17,90 @@ const navItems = [
   { icon: Settings, label: "Settings", path: "/settings" },
 ];
 
-const AppLayout = ({ children }) => {
-  const { theme, toggleTheme } = useTheme();
-  const { user, logout } = useAuth();
+function AppLayout(props) {
+  const children = props.children;
+  const themeContext = useTheme();
+  const theme = themeContext.theme;
+  const toggleTheme = themeContext.toggleTheme;
+  const authContext = useAuth();
+  const user = authContext.user;
+  const logout = authContext.logout;
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const isActive = (path) => location.pathname === path || (path === "/dashboard" && location.pathname === "/");
+  const isActive = function(path) {
+    return location.pathname === path || (path === "/dashboard" && location.pathname === "/");
+  };
+
+  const closeSidebar = function() {
+    setSidebarOpen(false);
+  };
+
+  const openSidebar = function() {
+    setSidebarOpen(true);
+  };
 
   return (
     <div className="min-h-screen bg-background flex">
-      {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />}
+      {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={closeSidebar}></div>}
 
-      <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-card border-r border-border transform transition-transform duration-200 lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
+      <aside className={"fixed lg:static inset-y-0 left-0 z-50 w-64 bg-card border-r border-border transform transition-transform duration-200 lg:translate-x-0 " + (sidebarOpen ? "translate-x-0" : "-translate-x-full")}>
         <div className="flex flex-col h-full">
           <div className="flex items-center gap-3 px-6 h-16 border-b border-border">
             <div className="w-9 h-9 rounded-lg gradient-ai flex items-center justify-center">
               <Brain className="w-5 h-5 text-white" />
             </div>
             <span className="font-bold text-lg tracking-tight">Sales Brain</span>
-            <Button variant="ghost" size="icon" className="ml-auto lg:hidden" onClick={() => setSidebarOpen(false)}>
+            <Button variant="ghost" size="icon" className="ml-auto lg:hidden" onClick={closeSidebar}>
               <X className="w-5 h-5" />
             </Button>
           </div>
 
           <nav className="flex-1 py-4 px-3 space-y-1 overflow-auto">
-            {navItems.map((item) => (
-              <Link key={item.path} to={item.path} onClick={() => setSidebarOpen(false)} className={`sidebar-link ${isActive(item.path) ? "active" : ""}`} data-testid={`nav-${item.label.toLowerCase()}`}>
-                <item.icon className="w-5 h-5" />
-                <span>{item.label}</span>
-              </Link>
-            ))}
+            {navItems.map(function(item) {
+              var Icon = item.icon;
+              return (
+                <Link key={item.path} to={item.path} onClick={closeSidebar} className={"sidebar-link " + (isActive(item.path) ? "active" : "")} data-testid={"nav-" + item.label.toLowerCase()}>
+                  <Icon className="w-5 h-5" />
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
           </nav>
 
           <div className="p-4 border-t border-border">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+            <DropdownMenuPrimitive.Root>
+              <DropdownMenuPrimitive.Trigger asChild>
                 <Button variant="ghost" className="w-full justify-start gap-3 h-auto py-2" data-testid="user-menu-trigger">
                   <Avatar className="w-8 h-8">
-                    <AvatarFallback className="bg-primary/10 text-primary text-sm">{user?.name?.charAt(0)?.toUpperCase() || "U"}</AvatarFallback>
+                    <AvatarFallback className="bg-primary/10 text-primary text-sm">{user && user.name ? user.name.charAt(0).toUpperCase() : "U"}</AvatarFallback>
                   </Avatar>
                   <div className="flex-1 text-left">
-                    <p className="text-sm font-medium truncate">{user?.name}</p>
-                    <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+                    <p className="text-sm font-medium truncate">{user ? user.name : ""}</p>
+                    <p className="text-xs text-muted-foreground truncate">{user ? user.email : ""}</p>
                   </div>
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem onClick={toggleTheme} data-testid="theme-toggle">
-                  {theme === "light" ? <Moon className="w-4 h-4 mr-2" /> : <Sun className="w-4 h-4 mr-2" />}
-                  {theme === "light" ? "Dark Mode" : "Light Mode"}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={logout} className="text-destructive" data-testid="logout-btn">
-                  <LogOut className="w-4 h-4 mr-2" />Logout
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              </DropdownMenuPrimitive.Trigger>
+              <DropdownMenuPrimitive.Portal>
+                <DropdownMenuPrimitive.Content align="end" className="w-56 z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
+                  <DropdownMenuPrimitive.Item onClick={toggleTheme} className="relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0" data-testid="theme-toggle">
+                    {theme === "light" ? <Moon className="w-4 h-4 mr-2" /> : <Sun className="w-4 h-4 mr-2" />}
+                    {theme === "light" ? "Dark Mode" : "Light Mode"}
+                  </DropdownMenuPrimitive.Item>
+                  <DropdownMenuPrimitive.Separator className="h-px bg-muted -mx-1 my-1" />
+                  <DropdownMenuPrimitive.Item onClick={logout} className="relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0 text-destructive" data-testid="logout-btn">
+                    <LogOut className="w-4 h-4 mr-2" />Logout
+                  </DropdownMenuPrimitive.Item>
+                </DropdownMenuPrimitive.Content>
+              </DropdownMenuPrimitive.Portal>
+            </DropdownMenuPrimitive.Root>
           </div>
         </div>
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
         <header className="h-16 border-b border-border bg-card/50 backdrop-blur-sm flex items-center px-4 lg:px-6 sticky top-0 z-30">
-          <Button variant="ghost" size="icon" className="lg:hidden mr-2" onClick={() => setSidebarOpen(true)} data-testid="mobile-menu-btn">
+          <Button variant="ghost" size="icon" className="lg:hidden mr-2" onClick={openSidebar} data-testid="mobile-menu-btn">
             <Menu className="w-5 h-5" />
           </Button>
           <h1 className="text-lg font-semibold capitalize">{location.pathname === "/" ? "Dashboard" : location.pathname.slice(1)}</h1>
@@ -94,6 +114,6 @@ const AppLayout = ({ children }) => {
       </div>
     </div>
   );
-};
+}
 
 export default AppLayout;
