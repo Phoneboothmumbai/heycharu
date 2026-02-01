@@ -11,9 +11,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { toast } from "sonner";
 import { 
-  ArrowLeft, Phone, Mail, MapPin, IndianRupee, Package, ShoppingCart, 
+  ArrowLeft, Phone, Mail, MapPin, IndianRupee, ShoppingCart, 
   MessageSquare, AlertTriangle, Tag, Plus, X, Smartphone, Clock, 
-  CheckCircle, AlertCircle, Ticket, User, Edit2, Save, Eye, EyeOff
+  CheckCircle, AlertCircle, Ticket, User, Edit2, Save, EyeOff
 } from "lucide-react";
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
@@ -36,6 +36,108 @@ const TopicTypeColors = {
   order: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400",
 };
 
+function StatCard({ icon: Icon, value, label, colorClass }) {
+  return (
+    <Card className="p-4 border-border/50">
+      <div className="flex items-center gap-3">
+        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${colorClass}`}>
+          <Icon className="w-5 h-5" />
+        </div>
+        <div>
+          <p className="text-2xl font-bold">{value}</p>
+          <p className="text-xs text-muted-foreground">{label}</p>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function TopicCard({ topic }) {
+  return (
+    <div className="p-3 rounded-lg bg-accent/50 space-y-2">
+      <div className="flex items-start justify-between gap-2">
+        <p className="font-medium text-sm">{topic.title}</p>
+        <Badge className={StatusColors[topic.status] || StatusColors.pending}>{topic.status}</Badge>
+      </div>
+      <div className="flex items-center gap-2">
+        <Badge variant="outline" className={TopicTypeColors[topic.topic_type] || ""}>
+          {topic.topic_type?.replace("_", " ")}
+        </Badge>
+        <span className="text-xs text-muted-foreground">
+          {new Date(topic.created_at).toLocaleDateString()}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function OrderCard({ order }) {
+  const items = order.items || [];
+  return (
+    <div className="p-4 rounded-lg border border-border/50 space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="font-medium">Order #{order.id.slice(0, 8).toUpperCase()}</p>
+          <p className="text-xs text-muted-foreground">
+            {new Date(order.created_at).toLocaleDateString()} • {items.length} items
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="font-bold text-emerald-600 dark:text-emerald-400 flex items-center justify-end">
+            <IndianRupee className="w-4 h-4" />
+            {(order.total || 0).toLocaleString('en-IN')}
+          </p>
+          <div className="flex gap-2 mt-1">
+            <Badge className={StatusColors[order.status] || StatusColors.pending}>{order.status}</Badge>
+            <Badge variant="outline">{order.payment_status}</Badge>
+          </div>
+        </div>
+      </div>
+      {items.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {items.slice(0, 3).map((item, idx) => (
+            <Badge key={idx} variant="secondary" className="text-xs">
+              {item.product_name || item.name} x{item.quantity}
+            </Badge>
+          ))}
+          {items.length > 3 && (
+            <Badge variant="secondary" className="text-xs">+{items.length - 3} more</Badge>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DeviceCard({ device, index, onRemove }) {
+  return (
+    <div className="p-4 rounded-lg border border-border/50 flex items-start gap-3">
+      <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+        <Smartphone className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="font-medium">{device.name}</p>
+        {device.model && <p className="text-sm text-muted-foreground">{device.model}</p>}
+        {device.serial && <p className="text-xs text-muted-foreground font-mono">{device.serial}</p>}
+        {device.purchase_date && (
+          <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+            <Clock className="w-3 h-3" />
+            {new Date(device.purchase_date).toLocaleDateString()}
+          </p>
+        )}
+      </div>
+      <Button 
+        variant="ghost" 
+        size="icon" 
+        className="text-red-500 hover:text-red-600 hover:bg-red-50"
+        onClick={() => onRemove(index)}
+      >
+        <X className="w-4 h-4" />
+      </Button>
+    </div>
+  );
+}
+
 const CustomerCoverPage = () => {
   const { customerId } = useParams();
   const navigate = useNavigate();
@@ -52,7 +154,7 @@ const CustomerCoverPage = () => {
       const res = await axios.get(`${API_URL}/api/customers/${customerId}/360`);
       setData(res.data);
       setNotes(res.data.customer?.notes || "");
-    } catch (e) {
+    } catch (err) {
       toast.error("Failed to load customer data");
       navigate("/customers");
     } finally {
@@ -68,7 +170,7 @@ const CustomerCoverPage = () => {
       toast.success("Notes saved");
       setEditingNotes(false);
       fetchData();
-    } catch (e) {
+    } catch (err) {
       toast.error("Failed to save notes");
     }
   };
@@ -81,7 +183,7 @@ const CustomerCoverPage = () => {
       toast.success("Tag added");
       setNewTag("");
       fetchData();
-    } catch (e) {
+    } catch (err) {
       toast.error("Failed to add tag");
     }
   };
@@ -92,7 +194,7 @@ const CustomerCoverPage = () => {
       await axios.put(`${API_URL}/api/customers/${customerId}/tags`, tags);
       toast.success("Tag removed");
       fetchData();
-    } catch (e) {
+    } catch (err) {
       toast.error("Failed to remove tag");
     }
   };
@@ -105,7 +207,7 @@ const CustomerCoverPage = () => {
       setIsAddDeviceOpen(false);
       setDeviceForm({ name: "", model: "", serial: "", purchase_date: "" });
       fetchData();
-    } catch (e) {
+    } catch (err) {
       toast.error("Failed to add device");
     }
   };
@@ -116,7 +218,7 @@ const CustomerCoverPage = () => {
       await axios.delete(`${API_URL}/api/customers/${customerId}/devices/${index}`);
       toast.success("Device removed");
       fetchData();
-    } catch (e) {
+    } catch (err) {
       toast.error("Failed to remove device");
     }
   };
@@ -136,10 +238,13 @@ const CustomerCoverPage = () => {
   if (!data) return null;
 
   const { customer, statistics, active_topics, resolved_topics, orders, tickets, escalations, is_excluded, exclusion_info, lead_info } = data;
+  const customerTags = customer.tags || [];
+  const customerDevices = customer.devices || [];
+  const customerAddresses = customer.addresses || [];
 
   return (
     <div className="space-y-6 animate-in" data-testid="customer-360-page">
-      {/* Header with back button */}
+      {/* Header */}
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" onClick={() => navigate("/customers")} data-testid="back-btn">
           <ArrowLeft className="w-5 h-5" />
@@ -163,7 +268,7 @@ const CustomerCoverPage = () => {
               <div>
                 <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
                   <h2 className="text-2xl font-bold">{customer.name}</h2>
-                  <Badge className={`${customer.customer_type === 'company' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400' : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'}`}>
+                  <Badge className={customer.customer_type === 'company' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400' : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'}>
                     {customer.customer_type}
                   </Badge>
                   {is_excluded && (
@@ -186,11 +291,11 @@ const CustomerCoverPage = () => {
                   </span>
                 )}
               </div>
-              {customer.addresses?.length > 0 && (
+              {customerAddresses.length > 0 && (
                 <div className="flex items-start gap-1.5 text-sm">
                   <MapPin className="w-4 h-4 text-muted-foreground mt-0.5" />
                   <span className="text-muted-foreground">
-                    {customer.addresses[0]?.street}, {customer.addresses[0]?.city}
+                    {customerAddresses[0]?.street}, {customerAddresses[0]?.city}
                   </span>
                 </div>
               )}
@@ -206,52 +311,12 @@ const CustomerCoverPage = () => {
         </CardContent>
       </Card>
 
-      {/* Quick Stats Row */}
+      {/* Stats Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4" data-testid="customer-stats">
-        <Card className="p-4 border-border/50">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-              <ShoppingCart className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{statistics.total_orders}</p>
-              <p className="text-xs text-muted-foreground">Total Orders</p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4 border-border/50">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-              <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{statistics.active_topics}</p>
-              <p className="text-xs text-muted-foreground">Active Topics</p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4 border-border/50">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
-              <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{statistics.completed_orders}</p>
-              <p className="text-xs text-muted-foreground">Delivered</p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4 border-border/50">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-              <MessageSquare className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{statistics.total_conversations}</p>
-              <p className="text-xs text-muted-foreground">Conversations</p>
-            </div>
-          </div>
-        </Card>
+        <StatCard icon={ShoppingCart} value={statistics.total_orders} label="Total Orders" colorClass="bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400" />
+        <StatCard icon={AlertCircle} value={statistics.active_topics} label="Active Topics" colorClass="bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400" />
+        <StatCard icon={CheckCircle} value={statistics.completed_orders} label="Delivered" colorClass="bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400" />
+        <StatCard icon={MessageSquare} value={statistics.total_conversations} label="Conversations" colorClass="bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400" />
       </div>
 
       {/* Exclusion Warning */}
@@ -290,7 +355,7 @@ const CustomerCoverPage = () => {
         </Card>
       )}
 
-      {/* Main Content Tabs */}
+      {/* Tabs */}
       <Tabs defaultValue="topics" className="space-y-4">
         <TabsList className="grid grid-cols-4 lg:w-[400px]">
           <TabsTrigger value="topics" data-testid="tab-topics">Topics</TabsTrigger>
@@ -302,7 +367,6 @@ const CustomerCoverPage = () => {
         {/* Topics Tab */}
         <TabsContent value="topics" className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Active Topics */}
             <Card className="border-border/50">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
@@ -314,27 +378,11 @@ const CustomerCoverPage = () => {
                 {active_topics.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-4">No active topics</p>
                 ) : (
-                  active_topics.map(topic => (
-                    <div key={topic.id} className="p-3 rounded-lg bg-accent/50 space-y-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="font-medium text-sm">{topic.title}</p>
-                        <Badge className={StatusColors[topic.status]}>{topic.status}</Badge>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className={TopicTypeColors[topic.topic_type]}>
-                          {topic.topic_type?.replace("_", " ")}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(topic.created_at).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </div>
-                  ))
+                  active_topics.map(topic => <TopicCard key={topic.id} topic={topic} />)
                 )}
               </CardContent>
             </Card>
 
-            {/* Resolved Topics */}
             <Card className="border-border/50">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
@@ -346,23 +394,12 @@ const CustomerCoverPage = () => {
                 {resolved_topics.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-4">No resolved topics</p>
                 ) : (
-                  resolved_topics.slice(0, 5).map(topic => (
-                    <div key={topic.id} className="p-3 rounded-lg bg-accent/50 space-y-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="font-medium text-sm">{topic.title}</p>
-                        <Badge className={StatusColors[topic.status]}>{topic.status}</Badge>
-                      </div>
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(topic.updated_at || topic.created_at).toLocaleDateString()}
-                      </span>
-                    </div>
-                  ))
+                  resolved_topics.slice(0, 5).map(topic => <TopicCard key={topic.id} topic={topic} />)
                 )}
               </CardContent>
             </Card>
           </div>
 
-          {/* Tickets & Escalations */}
           {(tickets.length > 0 || escalations.length > 0) && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {tickets.length > 0 && (
@@ -379,7 +416,7 @@ const CustomerCoverPage = () => {
                           <p className="text-sm font-medium">{ticket.ticket_number}</p>
                           <p className="text-xs text-muted-foreground">{ticket.subject}</p>
                         </div>
-                        <Badge className={StatusColors[ticket.status]}>{ticket.status}</Badge>
+                        <Badge className={StatusColors[ticket.status] || StatusColors.pending}>{ticket.status}</Badge>
                       </div>
                     ))}
                   </CardContent>
@@ -400,7 +437,7 @@ const CustomerCoverPage = () => {
                           <p className="text-sm font-medium text-red-800 dark:text-red-300">{esc.reason}</p>
                           <p className="text-xs text-muted-foreground">{new Date(esc.created_at).toLocaleDateString()}</p>
                         </div>
-                        <Badge className={StatusColors[esc.status]}>{esc.status}</Badge>
+                        <Badge className={StatusColors[esc.status] || StatusColors.pending}>{esc.status}</Badge>
                       </div>
                     ))}
                   </CardContent>
@@ -421,42 +458,7 @@ const CustomerCoverPage = () => {
                 <p className="text-sm text-muted-foreground text-center py-8">No orders yet</p>
               ) : (
                 <div className="space-y-3">
-                  {orders.map(order => (
-                    <div key={order.id} className="p-4 rounded-lg border border-border/50 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium">Order #{order.id.slice(0, 8).toUpperCase()}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {new Date(order.created_at).toLocaleDateString()} • {order.items?.length || 0} items
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-bold text-emerald-600 dark:text-emerald-400 flex items-center justify-end">
-                            <IndianRupee className="w-4 h-4" />
-                            {(order.total || 0).toLocaleString('en-IN')}
-                          </p>
-                          <div className="flex gap-2 mt-1">
-                            <Badge className={StatusColors[order.status]}>{order.status}</Badge>
-                            <Badge variant="outline">{order.payment_status}</Badge>
-                          </div>
-                        </div>
-                      </div>
-                      {order.items?.length > 0 && (
-                        <div className="flex flex-wrap gap-2">
-                          {order.items.slice(0, 3).map((item, idx) => (
-                            <Badge key={idx} variant="secondary" className="text-xs">
-                              {item.product_name || item.name} x{item.quantity}
-                            </Badge>
-                          ))}
-                          {order.items.length > 3 && (
-                            <Badge variant="secondary" className="text-xs">
-                              +{order.items.length - 3} more
-                            </Badge>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                  {orders.map(order => <OrderCard key={order.id} order={order} />)}
                 </div>
               )}
             </CardContent>
@@ -519,35 +521,12 @@ const CustomerCoverPage = () => {
               </Dialog>
             </CardHeader>
             <CardContent>
-              {(!customer.devices || customer.devices.length === 0) ? (
+              {customerDevices.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-8">No devices recorded</p>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {customer.devices.map((device, idx) => (
-                    <div key={idx} className="p-4 rounded-lg border border-border/50 flex items-start gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-                        <Smartphone className="w-5 h-5 text-slate-600 dark:text-slate-400" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium">{device.name}</p>
-                        {device.model && <p className="text-sm text-muted-foreground">{device.model}</p>}
-                        {device.serial && <p className="text-xs text-muted-foreground font-mono">{device.serial}</p>}
-                        {device.purchase_date && (
-                          <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            {new Date(device.purchase_date).toLocaleDateString()}
-                          </p>
-                        )}
-                      </div>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                        onClick={() => removeDevice(idx)}
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </div>
+                  {customerDevices.map((device, idx) => (
+                    <DeviceCard key={idx} device={device} index={idx} onRemove={removeDevice} />
                   ))}
                 </div>
               )}
@@ -557,7 +536,6 @@ const CustomerCoverPage = () => {
 
         {/* Notes & Tags Tab */}
         <TabsContent value="notes" className="space-y-4">
-          {/* Tags Section */}
           <Card className="border-border/50">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
@@ -566,18 +544,15 @@ const CustomerCoverPage = () => {
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex flex-wrap gap-2">
-                {(customer.tags || []).map((tag, idx) => (
+                {customerTags.map((tag, idx) => (
                   <Badge key={idx} variant="secondary" className="px-3 py-1 flex items-center gap-1">
                     {tag}
-                    <button 
-                      onClick={() => removeTag(tag)} 
-                      className="ml-1 hover:text-red-500"
-                    >
+                    <button onClick={() => removeTag(tag)} className="ml-1 hover:text-red-500">
                       <X className="w-3 h-3" />
                     </button>
                   </Badge>
                 ))}
-                {(!customer.tags || customer.tags.length === 0) && (
+                {customerTags.length === 0 && (
                   <p className="text-sm text-muted-foreground">No tags yet</p>
                 )}
               </div>
@@ -596,7 +571,6 @@ const CustomerCoverPage = () => {
             </CardContent>
           </Card>
 
-          {/* Notes Section */}
           <Card className="border-border/50">
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <CardTitle className="text-base">Internal Notes</CardTitle>
