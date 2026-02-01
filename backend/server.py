@@ -1054,9 +1054,10 @@ async def get_whatsapp_status(user: dict = Depends(get_current_user)):
             "connected": data.get("connected", False),
             "phone_number": data.get("phone"),
             "qr_code": data.get("qrCode"),
-            "status": "connected" if data.get("connected") else "waiting_for_scan",
+            "status": data.get("connectionStatus", "waiting_for_scan"),
             "sync_progress": data.get("syncProgress", {}),
             "previewMode": data.get("previewMode", False),
+            "library": data.get("library", "unknown"),
             "message": data.get("message")
         }
     except Exception as e:
@@ -1067,7 +1068,7 @@ async def get_whatsapp_status(user: dict = Depends(get_current_user)):
             "qr_code": None,
             "status": "service_unavailable",
             "error": str(e),
-            "previewMode": True
+            "previewMode": False
         }
 
 @api_router.get("/whatsapp/qr")
