@@ -802,7 +802,7 @@ async def get_leads(status: Optional[str] = None, user: dict = Depends(get_curre
     if status:
         query["status"] = status
     leads = await db.lead_injections.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
-    return [LeadInjectionResponse(**l) for l in leads]
+    return [LeadInjectionResponse(**lead) for lead in leads]
 
 @api_router.post("/leads/inject", response_model=LeadInjectionResponse)
 async def inject_lead(data: LeadInjectionCreate, user: dict = Depends(get_current_user)):
