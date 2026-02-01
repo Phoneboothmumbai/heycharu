@@ -62,7 +62,6 @@ const KnowledgeBasePage = () => {
     }
 
     try {
-      const token = localStorage.getItem('token');
       const payload = {
         ...form,
         tags: form.tags.split(",").map(t => t.trim()).filter(t => t)
@@ -70,12 +69,12 @@ const KnowledgeBasePage = () => {
 
       if (editingArticle) {
         await axios.put(`${API_URL}/api/kb/${editingArticle.id}`, payload, {
-          headers: { Authorization: `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${getToken()}` }
         });
         toast.success("Article updated");
       } else {
         await axios.post(`${API_URL}/api/kb`, payload, {
-          headers: { Authorization: `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${getToken()}` }
         });
         toast.success("Article added");
       }
