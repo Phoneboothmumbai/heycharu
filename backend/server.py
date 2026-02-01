@@ -2820,12 +2820,15 @@ async def get_settings(user: dict = Depends(get_current_user)):
             "follow_up_days": 3,
             "ai_enabled": True,
             "auto_reply": True,
+            "ai_instructions": "",
             "inactivity_summary_minutes": 30
         }
         await db.settings.insert_one(settings)
-    # Ensure owner_phone exists for backward compatibility
+    # Ensure fields exist for backward compatibility
     if "owner_phone" not in settings:
         settings["owner_phone"] = ""
+    if "ai_instructions" not in settings:
+        settings["ai_instructions"] = ""
     return settings
 
 @api_router.put("/settings")
