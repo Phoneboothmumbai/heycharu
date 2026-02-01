@@ -301,6 +301,7 @@ app.get('/status', (req, res) => {
         qrCode: currentQR,
         syncProgress: syncProgress,
         connectionStatus: connectionStatus,
+        connectionTimestamp: connectionTimestamp,  // When session started
         previewMode: false,
         library: 'baileys'
     });
