@@ -2258,19 +2258,70 @@ async def handle_incoming_whatsapp(data: WhatsAppIncoming):
                 "tag": exclusion_info.get("tag", "other")
             }
         
-        # ========== CHECK 2: Is this a LEAD INJECTION command from owner? ==========
-        # Get owner's phone from settings
+        # ========== CHECK 2: Is this from OWNER? ==========
         settings = await db.settings.find_one({"type": "global"}, {"_id": 0})
         owner_phone = settings.get("owner_phone", "").replace("+", "").replace(" ", "").replace("-", "") if settings else ""
         
         if owner_phone and phone[-10:] == owner_phone[-10:]:
-            # This is from the owner - check for lead injection command
+            # This is from the owner
+            
+            # CHECK 2a: Is this a reply to an escalation?
+            # Look for pending escalation
+            pending_escalation = await db.escalations.find_one(
+                {"status": "pending_owner_reply"},
+                {"_id": 0},
+                sort=[("created_at", -1)]
+            )
+            
+            if pending_escalation and not data.message.lower().startswith("customer"):
+                # Owner is replying to escalation - forward to customer
+                customer_phone = pending_escalation.get("customer_phone")
+                if customer_phone:
+                    # Send owner's reply to the customer
+                    await send_whatsapp_message(customer_phone, data.message)
+                    
+                    # Mark escalation as resolved
+                    await db.escalations.update_one(
+                        {"id": pending_escalation["id"]},
+                        {"$set": {
+                            "status": "resolved",
+                            "owner_reply": data.message,
+                            "resolved_at": datetime.now(timezone.utc).isoformat()
+                        }}
+                    )
+                    
+                    # Also save message in customer's conversation
+                    conv = await db.conversations.find_one(
+                        {"customer_phone": {"$regex": customer_phone[-10:]}},
+                        {"_id": 0}
+                    )
+                    if conv:
+                        await db.messages.insert_one({
+                            "id": str(uuid.uuid4()),
+                            "conversation_id": conv["id"],
+                            "content": data.message,
+                            "sender_type": "agent",
+                            "message_type": "text",
+                            "attachments": [],
+                            "created_at": datetime.now(timezone.utc).isoformat()
+                        })
+                    
+                    # Confirm to owner
+                    await send_whatsapp_message(phone, f"✓ Reply sent to customer {customer_phone}")
+                    
+                    logger.info(f"Owner reply forwarded to customer: {customer_phone}")
+                    return {
+                        "success": True,
+                        "mode": "owner_reply_forwarded",
+                        "customer_phone": customer_phone
+                    }
+            
+            # CHECK 2b: Is this a lead injection command?
             lead_data = parse_lead_injection_command(data.message)
             if lead_data:
                 logger.info(f"LEAD INJECTION: Owner command detected - {lead_data}")
                 
                 # Process lead injection
-                # Inject the lead
                 lead_result = await inject_lead_internal(
                     customer_name=lead_data["customer_name"],
                     phone=lead_data["phone"],
