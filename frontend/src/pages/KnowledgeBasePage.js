@@ -121,13 +121,12 @@ const KnowledgeBasePage = () => {
 
     setIsScraping(true);
     try {
-      const token = localStorage.getItem('token');
       const res = await axios.post(`${API_URL}/api/kb/scrape-url`, {
         url: scrapeUrl,
         title: scrapeTitle || null,
         category: scrapeCategory
       }, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${getToken()}` }
       });
 
       toast.success(`Scraped: ${res.data.title} (${res.data.content_length} chars)`);
