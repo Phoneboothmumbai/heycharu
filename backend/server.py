@@ -2342,8 +2342,14 @@ async def handle_incoming_whatsapp(data: WhatsAppIncoming):
         else:
             logger.info(f"Found existing customer: {customer.get('name')} ({customer.get('id')})")
         
-        # Find or create conversation
-        conv = await db.conversations.find_one({"customer_id": customer["id"]})
+        # Find or create conversation - look up by customer_id OR customer_phone
+        conv = await db.conversations.find_one(
+            {"$or": [
+                {"customer_id": customer["id"]},
+                {"customer_phone": {"$regex": phone_last10}}
+            ]},
+            {"_id": 0}
+        )
         if not conv:
             conv_id = str(uuid.uuid4())
             conv = {
