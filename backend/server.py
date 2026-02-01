@@ -657,6 +657,206 @@ async def send_whatsapp_message(phone: str, message: str) -> bool:
         logger.error(f"Failed to send WhatsApp message: {e}")
         return False
 
+# ============== AUTO-MESSAGING HELPERS ==============
+
+# Default message templates
+DEFAULT_TEMPLATES = {
+    "no_response": "Just checking in — let me know if you need any help with {topic}.",
+    "partial_conversation": "Sharing a quick reminder — I was waiting for your response on {topic}.",
+    "price_shared": "Let me know if you'd like me to proceed or need any clarification on the pricing.",
+    "order_confirmed": "Thanks for confirming your order! I'm sharing the payment details below. Total: ₹{amount}",
+    "payment_received": "Payment received ✓ We'll update you once the order is processed.",
+    "order_completed": "Your order has been completed. Let us know if you need anything else!",
+    "ticket_created": "We've created a support ticket for this. Ticket ID: #{ticket_id}",
+    "ticket_updated": "Quick update — your ticket #{ticket_id} is now being worked on.",
+    "ticket_resolved": "This issue has been resolved. Please let us know if you face it again.",
+    "ai_uncertain": "Let me check this and get back to you shortly.",
+    "human_takeover": "I'm personally looking into this for you."
+}
+
+async def get_auto_message_settings() -> dict:
+    """Get auto-messaging settings"""
+    settings = await db.auto_message_settings.find_one({"type": "global"}, {"_id": 0})
+    if not settings:
+        settings = {
+            "type": "global",
+            "max_messages_per_topic": 3,
+            "cooldown_hours": 24,
+            "dnd_start_hour": 21,
+            "dnd_end_hour": 9,
+            "no_response_days": 2,
+            "auto_messaging_enabled": True,
+            "templates": DEFAULT_TEMPLATES
+        }
+        await db.auto_message_settings.insert_one(settings)
+    return settings
+
+async def can_send_auto_message(customer_id: str, topic_id: str = None) -> tuple:
+    """Check if we can send an auto-message (respects anti-spam rules)"""
+    settings = await get_auto_message_settings()
+    
+    if not settings.get("auto_messaging_enabled", True):
+        return False, "Auto-messaging disabled"
+    
+    # Check if number is excluded
+    customer = await db.customers.find_one({"id": customer_id}, {"_id": 0, "phone": 1})
+    if customer and await is_number_excluded(customer.get("phone", "")):
+        return False, "Number is excluded"
+    
+    # Check DND window
+    now = datetime.now(timezone.utc)
+    current_hour = now.hour
+    dnd_start = settings.get("dnd_start_hour", 21)
+    dnd_end = settings.get("dnd_end_hour", 9)
+    
+    if dnd_start > dnd_end:  # Spans midnight
+        if current_hour >= dnd_start or current_hour < dnd_end:
+            return False, "Do Not Disturb hours"
+    else:
+        if dnd_start <= current_hour < dnd_end:
+            return False, "Do Not Disturb hours"
+    
+    # Check cooldown (last auto-message to this customer)
+    cooldown_hours = settings.get("cooldown_hours", 24)
+    cutoff = (now - timedelta(hours=cooldown_hours)).isoformat()
+    recent_auto = await db.auto_messages_sent.find_one({
+        "customer_id": customer_id,
+        "sent_at": {"$gte": cutoff}
+    })
+    if recent_auto:
+        return False, f"Cooldown period ({cooldown_hours}h)"
+    
+    # Check max messages per topic
+    if topic_id:
+        max_per_topic = settings.get("max_messages_per_topic", 3)
+        topic_count = await db.auto_messages_sent.count_documents({
+            "topic_id": topic_id,
+            "customer_id": customer_id
+        })
+        if topic_count >= max_per_topic:
+            return False, f"Max messages reached for topic ({max_per_topic})"
+    
+    return True, "OK"
+
+async def send_auto_message(
+    customer_id: str,
+    conversation_id: str,
+    trigger_type: str,
+    template_vars: dict = None,
+    topic_id: str = None
+) -> dict:
+    """Send an auto-message based on trigger type"""
+    
+    # Check if we can send
+    can_send, reason = await can_send_auto_message(customer_id, topic_id)
+    if not can_send:
+        logger.info(f"Auto-message blocked: {reason} - Customer: {customer_id}")
+        return {"sent": False, "reason": reason}
+    
+    # Get settings and template
+    settings = await get_auto_message_settings()
+    templates = settings.get("templates", DEFAULT_TEMPLATES)
+    template = templates.get(trigger_type, "")
+    
+    if not template:
+        return {"sent": False, "reason": "No template for trigger type"}
+    
+    # Format message with variables
+    message = template
+    if template_vars:
+        for key, value in template_vars.items():
+            message = message.replace("{" + key + "}", str(value))
+    
+    # Get customer phone
+    customer = await db.customers.find_one({"id": customer_id}, {"_id": 0})
+    if not customer or not customer.get("phone"):
+        return {"sent": False, "reason": "Customer phone not found"}
+    
+    phone = customer["phone"].replace(" ", "").replace("-", "")
+    
+    # Send via WhatsApp
+    sent = await send_whatsapp_message(phone, message)
+    
+    if sent:
+        now = datetime.now(timezone.utc).isoformat()
+        
+        # Log the auto-message
+        await db.auto_messages_sent.insert_one({
+            "id": str(uuid.uuid4()),
+            "customer_id": customer_id,
+            "conversation_id": conversation_id,
+            "topic_id": topic_id,
+            "trigger_type": trigger_type,
+            "message": message,
+            "sent_at": now
+        })
+        
+        # Also save as a regular message
+        msg_id = str(uuid.uuid4())
+        await db.messages.insert_one({
+            "id": msg_id,
+            "conversation_id": conversation_id,
+            "content": message,
+            "sender_type": "system",
+            "message_type": "auto",
+            "trigger_type": trigger_type,
+            "attachments": [],
+            "created_at": now
+        })
+        
+        # Update conversation
+        await db.conversations.update_one(
+            {"id": conversation_id},
+            {"$set": {"last_message": message, "last_message_at": now}}
+        )
+        
+        logger.info(f"Auto-message sent: {trigger_type} - Customer: {customer_id}")
+        return {"sent": True, "message_id": msg_id, "message": message}
+    
+    return {"sent": False, "reason": "WhatsApp send failed"}
+
+async def schedule_follow_up(
+    customer_id: str,
+    conversation_id: str,
+    topic_id: str,
+    trigger_type: str,
+    delay_hours: int,
+    template_vars: dict = None
+):
+    """Schedule a follow-up message for later"""
+    settings = await get_auto_message_settings()
+    templates = settings.get("templates", DEFAULT_TEMPLATES)
+    template = templates.get(trigger_type, "")
+    
+    message = template
+    if template_vars:
+        for key, value in template_vars.items():
+            message = message.replace("{" + key + "}", str(value))
+    
+    customer = await db.customers.find_one({"id": customer_id}, {"_id": 0})
+    if not customer:
+        return None
+    
+    now = datetime.now(timezone.utc)
+    scheduled_for = (now + timedelta(hours=delay_hours)).isoformat()
+    
+    scheduled_id = str(uuid.uuid4())
+    await db.scheduled_messages.insert_one({
+        "id": scheduled_id,
+        "customer_id": customer_id,
+        "customer_phone": customer.get("phone", ""),
+        "conversation_id": conversation_id,
+        "topic_id": topic_id,
+        "trigger_type": trigger_type,
+        "message": message,
+        "scheduled_for": scheduled_for,
+        "status": "pending",
+        "created_at": now.isoformat()
+    })
+    
+    logger.info(f"Follow-up scheduled: {trigger_type} - Customer: {customer_id} - In {delay_hours}h")
+    return scheduled_id
+
 # ============== HEALTH CHECK ==============
 
 @api_router.get("/")
