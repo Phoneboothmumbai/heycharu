@@ -663,7 +663,8 @@ SALES FLOW - NEVER ASK:
         products_context = ""
         if flow_type in ["sales", "general"]:
             products = await db.products.find({"is_active": True}, {"_id": 0, "name": 1, "base_price": 1, "category": 1}).to_list(20)
-            products_context = f"PRODUCTS: {', '.join([f'{p[\"name\"]} (₹{p[\"base_price\"]})' for p in products])}"
+            product_list = [f"{p['name']} (₹{p['base_price']})" for p in products]
+            products_context = f"PRODUCTS: {', '.join(product_list)}"
         
         # ========== BUILD STATE-AWARE PROMPT ==========
         context = f"""You are a professional assistant for an electronics/Apple store. You handle repairs and sales.
