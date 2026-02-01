@@ -569,56 +569,81 @@ def parse_lead_injection_command(message: str) -> Optional[Dict]:
     # Remove "lead inject" prefix for easier parsing
     clean_msg = re.sub(r'lead\s*inject\s*', '', normalized, flags=re.IGNORECASE).strip()
     
-    # Try to extract name and product
-    # Format 1: "Product Name Phone" - e.g., "iPhone 17 Foram 9969528677"
-    # Format 2: "Name - Phone Product" - e.g., "CKM - 9820983978 AirPods Pro"
-    # Format 3: "Name Phone Product" - e.g., "Rahul 9876543210 MacBook Air M3"
-    
-    # Remove phone from message to separate name and product
-    parts_without_phone = re.sub(r'\s*-?\s*' + phone + r'\s*-?\s*', ' | ', clean_msg).strip()
-    parts = [p.strip() for p in parts_without_phone.split('|') if p.strip()]
+    # Product keywords to identify what's a product vs name
+    product_keywords = ['iphone', 'macbook', 'ipad', 'airpods', 'watch', 'pro', 'max', 'air', 'mini', 'apple', 'samsung', 'pixel', 'galaxy']
     
     customer_name = "Unknown"
     product_interest = "General Inquiry"
     
-    if len(parts) == 2:
-        # Two parts - could be "Product | Name" or "Name | Product"
-        part1, part2 = parts[0], parts[1]
-        
-        # If part1 looks like a product (contains numbers or common product words)
-        product_keywords = ['iphone', 'macbook', 'ipad', 'airpods', 'watch', 'pro', 'max', 'air', 'mini']
-        part1_is_product = any(kw in part1.lower() for kw in product_keywords) or re.search(r'\d', part1)
-        
-        if part1_is_product:
-            product_interest = part1
-            customer_name = part2 if part2 else "Unknown"
-        else:
-            customer_name = part1 if part1 else "Unknown"
-            product_interest = part2 if part2 else "General Inquiry"
-    elif len(parts) == 1:
-        # Single part - try to split by name pattern
-        single = parts[0]
-        # Check if it starts with a name (single word followed by product)
-        name_product = re.match(r'^([A-Za-z]+)\s+(.+)$', single)
-        if name_product:
-            potential_name = name_product.group(1)
-            potential_product = name_product.group(2)
-            # If potential_product looks like a product
-            if any(kw in potential_product.lower() for kw in product_keywords):
-                customer_name = potential_name
-                product_interest = potential_product
-            else:
-                # Assume the whole thing is product, name unknown
-                product_interest = single
-        else:
-            product_interest = single if single else "General Inquiry"
+    # Strategy: Split by phone number position
+    phone_pos = clean_msg.find(phone)
+    before_phone = clean_msg[:phone_pos].strip(' -') if phone_pos > 0 else ""
+    after_phone = clean_msg[phone_pos + len(phone):].strip(' -') if phone_pos >= 0 else clean_msg
     
-    # Clean up name - remove common prefixes/suffixes
+    # Analyze what's before and after phone
+    before_is_product = any(kw in before_phone.lower() for kw in product_keywords) or (before_phone and re.search(r'\d', before_phone))
+    after_is_product = any(kw in after_phone.lower() for kw in product_keywords) or (after_phone and re.search(r'\d', after_phone))
+    
+    # Check if before_phone looks like a name (single word, no numbers)
+    before_is_name = before_phone and re.match(r'^[A-Za-z]+$', before_phone.split()[-1] if before_phone.split() else "")
+    after_is_name = after_phone and re.match(r'^[A-Za-z]+$', after_phone.split()[0] if after_phone.split() else "")
+    
+    if before_phone and after_phone:
+        # Both parts exist
+        if before_is_product and not after_is_product:
+            product_interest = before_phone
+            customer_name = after_phone.split()[0] if after_phone else "Unknown"
+        elif after_is_product and not before_is_product:
+            customer_name = before_phone.split()[-1] if before_phone else "Unknown"
+            product_interest = after_phone
+        elif before_is_name and after_is_product:
+            customer_name = before_phone.split()[-1]
+            product_interest = after_phone
+        elif after_is_name and before_is_product:
+            product_interest = before_phone
+            customer_name = after_phone.split()[0]
+        else:
+            # Default: before is name-related, after is product
+            if before_phone:
+                customer_name = before_phone.split()[-1]
+            if after_phone:
+                product_interest = after_phone
+    elif before_phone:
+        # Only content before phone - could be "Name Product" or just "Product"
+        words = before_phone.split()
+        if len(words) >= 2:
+            # Check if first word is a name
+            first_word_is_name = not any(kw in words[0].lower() for kw in product_keywords)
+            if first_word_is_name:
+                customer_name = words[0]
+                product_interest = ' '.join(words[1:])
+            else:
+                product_interest = before_phone
+        else:
+            product_interest = before_phone
+    elif after_phone:
+        # Only content after phone
+        words = after_phone.split()
+        if len(words) >= 2:
+            last_word_is_name = not any(kw in words[-1].lower() for kw in product_keywords)
+            if last_word_is_name:
+                customer_name = words[-1]
+                product_interest = ' '.join(words[:-1])
+            else:
+                product_interest = after_phone
+        elif words:
+            # Single word after phone - likely name
+            customer_name = words[0]
+    
+    # Clean up name
     customer_name = re.sub(r'^(mr\.?|mrs\.?|ms\.?|dr\.?)\s*', '', customer_name, flags=re.IGNORECASE).strip()
-    customer_name = customer_name.split()[0].capitalize() if customer_name and customer_name != "Unknown" else customer_name
+    if customer_name and customer_name != "Unknown":
+        customer_name = customer_name.split()[0].capitalize()
     
     # Clean up product
     product_interest = re.sub(r'^(a|an|the)\s+', '', product_interest, flags=re.IGNORECASE).strip()
+    if not product_interest:
+        product_interest = "General Inquiry"
     
     return {
         "customer_name": customer_name,
