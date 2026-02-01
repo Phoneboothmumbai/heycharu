@@ -291,7 +291,47 @@ class ConversationSummaryResponse(BaseModel):
     summary_text: str
     created_at: str
 
+# Excluded Numbers Model (Silent Monitoring)
+class ExcludedNumberCreate(BaseModel):
+    phone: str
+    tag: str = "other"  # dealer, vendor, internal, other
+    reason: str = ""
+    is_temporary: bool = False
+
+class ExcludedNumberResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    phone: str
+    tag: str
+    reason: str
+    is_temporary: bool
+    created_at: str
+    created_by: str
+
+# Lead Injection Model
+class LeadInjectionCreate(BaseModel):
+    customer_name: str
+    phone: str
+    product_interest: str
+    notes: str = ""
+
+class LeadInjectionResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    customer_id: str
+    customer_name: str
+    phone: str
+    product_interest: str
+    conversation_id: str
+    topic_id: str
+    outbound_message_sent: bool
+    status: str  # pending, in_progress, completed, escalated
+    notes: str
+    created_at: str
+    created_by: str
+
 # ============== AUTH HELPERS ==============
+
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
