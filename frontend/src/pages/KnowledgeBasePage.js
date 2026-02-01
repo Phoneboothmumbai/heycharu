@@ -154,13 +154,12 @@ const KnowledgeBasePage = () => {
 
     setIsUploading(true);
     try {
-      const token = localStorage.getItem('token');
       const formData = new FormData();
       formData.append('file', file);
 
       const res = await axios.post(`${API_URL}/api/kb/upload-excel`, formData, {
         headers: { 
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${getToken()}`,
           'Content-Type': 'multipart/form-data'
         }
       });
