@@ -1265,6 +1265,157 @@ async def delete_customer(customer_id: str, user: dict = Depends(get_current_use
         raise HTTPException(status_code=404, detail="Customer not found")
     return {"message": "Customer deleted"}
 
+# ============== CUSTOMER 360° VIEW ==============
+
+@api_router.get("/customers/{customer_id}/360")
+async def get_customer_360(customer_id: str, user: dict = Depends(get_current_user)):
+    """Get comprehensive 360° view of a customer with all related data"""
+    
+    # Get customer base data
+    customer = await db.customers.find_one({"id": customer_id}, {"_id": 0})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    # Get all conversations for this customer
+    conversations = await db.conversations.find(
+        {"customer_id": customer_id}, 
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    # Get all topics (active and resolved)
+    topics = await db.topics.find(
+        {"customer_id": customer_id},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    # Separate active vs resolved topics
+    active_topics = [t for t in topics if t.get("status") in ["open", "in_progress"]]
+    resolved_topics = [t for t in topics if t.get("status") in ["resolved", "closed"]]
+    
+    # Get all orders
+    orders = await db.orders.find(
+        {"customer_id": customer_id},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    # Get all tickets
+    tickets = await db.tickets.find(
+        {"customer_id": customer_id},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    # Get escalations
+    escalations = await db.escalations.find(
+        {"customer_id": customer_id},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(50)
+    
+    # Get recent messages (last 20 across all conversations)
+    conv_ids = [c["id"] for c in conversations]
+    recent_messages = []
+    if conv_ids:
+        recent_messages = await db.messages.find(
+            {"conversation_id": {"$in": conv_ids}},
+            {"_id": 0}
+        ).sort("created_at", -1).limit(20).to_list(20)
+    
+    # Get auto-messages sent to this customer
+    auto_messages = await db.auto_messages_sent.find(
+        {"customer_id": customer_id},
+        {"_id": 0}
+    ).sort("sent_at", -1).limit(10).to_list(10)
+    
+    # Get lead injection info if any
+    lead_info = await db.lead_injections.find_one(
+        {"customer_id": customer_id},
+        {"_id": 0}
+    )
+    
+    # Check if number is excluded
+    is_excluded = await is_number_excluded(customer.get("phone", ""))
+    exclusion_info = await get_excluded_number_info(customer.get("phone", "")) if is_excluded else None
+    
+    # Calculate statistics
+    total_orders = len(orders)
+    total_spent = sum(o.get("total", 0) for o in orders)
+    pending_orders = len([o for o in orders if o.get("status") in ["pending", "processing"]])
+    completed_orders = len([o for o in orders if o.get("status") == "delivered"])
+    
+    # Build 360° response
+    return {
+        "customer": customer,
+        "statistics": {
+            "total_orders": total_orders,
+            "total_spent": total_spent,
+            "pending_orders": pending_orders,
+            "completed_orders": completed_orders,
+            "active_topics": len(active_topics),
+            "resolved_topics": len(resolved_topics),
+            "total_conversations": len(conversations),
+            "open_tickets": len([t for t in tickets if t.get("status") in ["open", "in_progress"]]),
+            "escalations": len(escalations)
+        },
+        "active_topics": active_topics[:10],
+        "resolved_topics": resolved_topics[:10],
+        "orders": orders[:10],
+        "tickets": tickets[:10],
+        "escalations": escalations[:5],
+        "recent_messages": recent_messages,
+        "auto_messages": auto_messages,
+        "lead_info": lead_info,
+        "is_excluded": is_excluded,
+        "exclusion_info": exclusion_info,
+        "conversations": conversations[:5]
+    }
+
+@api_router.put("/customers/{customer_id}/notes")
+async def update_customer_notes(customer_id: str, notes: str, user: dict = Depends(get_current_user)):
+    """Update customer internal notes"""
+    result = await db.customers.update_one(
+        {"id": customer_id},
+        {"$set": {"notes": notes, "last_interaction": datetime.now(timezone.utc).isoformat()}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return {"message": "Notes updated"}
+
+@api_router.put("/customers/{customer_id}/tags")
+async def update_customer_tags(customer_id: str, tags: List[str], user: dict = Depends(get_current_user)):
+    """Update customer tags"""
+    result = await db.customers.update_one(
+        {"id": customer_id},
+        {"$set": {"tags": tags}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return {"message": "Tags updated"}
+
+@api_router.post("/customers/{customer_id}/devices")
+async def add_customer_device(customer_id: str, device: Dict[str, Any], user: dict = Depends(get_current_user)):
+    """Add a device to customer's device list"""
+    result = await db.customers.update_one(
+        {"id": customer_id},
+        {"$push": {"devices": {**device, "added_at": datetime.now(timezone.utc).isoformat()}}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return {"message": "Device added"}
+
+@api_router.delete("/customers/{customer_id}/devices/{device_index}")
+async def remove_customer_device(customer_id: str, device_index: int, user: dict = Depends(get_current_user)):
+    """Remove a device from customer's device list by index"""
+    customer = await db.customers.find_one({"id": customer_id}, {"_id": 0})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    devices = customer.get("devices", [])
+    if 0 <= device_index < len(devices):
+        devices.pop(device_index)
+        await db.customers.update_one({"id": customer_id}, {"$set": {"devices": devices}})
+        return {"message": "Device removed"}
+    else:
+        raise HTTPException(status_code=400, detail="Invalid device index")
+
 # ============== CONVERSATIONS & TOPICS ==============
 
 @api_router.get("/conversations", response_model=List[ConversationResponse])
