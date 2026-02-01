@@ -16,6 +16,25 @@ Sales Brain is a SaaS platform that acts as a central brain for customer intelli
 - ✅ Knowledge Base (FAQs, Policies)
 - ✅ Escalation System
 
+### Customer 360° Cover View (NEW - Feb 2026)
+- ✅ Comprehensive single-page customer dashboard
+- ✅ Customer header with avatar, name, type badge, contact info
+- ✅ Total Lifetime Value display
+- ✅ Statistics row (Total Orders, Active Topics, Delivered, Conversations)
+- ✅ Topics tab: Active and Resolved topics
+- ✅ Orders tab: Full order history with status badges
+- ✅ Devices tab: Customer devices with Add/Remove functionality
+- ✅ Notes tab: Customer tags (add/remove) + Internal notes (edit/save)
+- ✅ Shows Lead Injection info and Silent Monitoring status
+- ✅ Navigation from customers list via row click or View 360° button
+
+**API Endpoints:**
+- `GET /api/customers/{id}/360` - Get comprehensive customer data
+- `PUT /api/customers/{id}/notes` - Update internal notes
+- `PUT /api/customers/{id}/tags` - Update customer tags
+- `POST /api/customers/{id}/devices` - Add device
+- `DELETE /api/customers/{id}/devices/{index}` - Remove device
+
 ### WhatsApp Integration (LIVE - Baileys)
 - ✅ Real QR code scanning (no Chromium needed)
 - ✅ Real-time message receiving
@@ -23,20 +42,20 @@ Sales Brain is a SaaS platform that acts as a central brain for customer intelli
 - ✅ Session persistence
 - ✅ AI auto-reply on incoming messages
 
-### Lead Injection (NEW)
+### Lead Injection
 - ✅ Owner can inject leads via UI
 - ✅ Owner can inject leads via WhatsApp command
 - ✅ AI creates customer, conversation, topic
 - ✅ AI sends first outbound message
 - ✅ Lead tracking with status
 
-### Number Exclusion - Silent Monitoring (NEW)
+### Number Exclusion - Silent Monitoring
 - ✅ Mark numbers as excluded (dealer, vendor, internal)
 - ✅ Messages recorded but AI NEVER replies
 - ✅ Searchable audit trail
 - ✅ Category tagging
 
-### Auto-Messaging System (NEW)
+### Auto-Messaging System
 Trigger-based, permission-controlled automated messages with full anti-spam controls.
 
 **Implemented Triggers:**
