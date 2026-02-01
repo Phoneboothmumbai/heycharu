@@ -102,9 +102,8 @@ const KnowledgeBasePage = () => {
   const handleDelete = async (id) => {
     if (!window.confirm("Delete this article?")) return;
     try {
-      const token = localStorage.getItem('token');
       await axios.delete(`${API_URL}/api/kb/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${getToken()}` }
       });
       toast.success("Article deleted");
       fetchArticles();
