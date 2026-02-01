@@ -2348,6 +2348,59 @@ async def handle_incoming_whatsapp(data: WhatsAppIncoming):
                 {"$set": {"last_message": data.message, "last_message_at": now}, "$inc": {"unread_count": 1}}
             )
         
+        # ========== AUTO-CREATE/UPDATE TOPIC BASED ON MESSAGE ==========
+        # Check if there's an active topic for this customer
+        active_topic = await db.topics.find_one(
+            {"customer_id": customer["id"], "status": {"$in": ["open", "in_progress"]}},
+            {"_id": 0}
+        )
+        
+        if not active_topic:
+            # Auto-detect topic type from message
+            msg_lower = data.message.lower()
+            
+            # Repair keywords
+            repair_keywords = ["repair", "fix", "broken", "not working", "broke", "damage", "crack", "issue", "problem", "dead", "won't turn on", "screen"]
+            # Sales keywords
+            sales_keywords = ["buy", "price", "cost", "purchase", "want to get", "looking for", "interested in", "available", "how much"]
+            
+            # Determine topic type
+            is_repair = any(word in msg_lower for word in repair_keywords)
+            is_sales = any(word in msg_lower for word in sales_keywords)
+            
+            if is_repair:
+                topic_type = "service_request"
+                # Try to extract device from message
+                device_hints = ["mac", "macbook", "iphone", "ipad", "airpod", "watch", "imac"]
+                device_found = next((d for d in device_hints if d in msg_lower), None)
+                topic_title = f"{device_found.title() if device_found else 'Device'} Repair Request"
+            elif is_sales:
+                topic_type = "product_inquiry"
+                topic_title = "Product Inquiry"
+            else:
+                topic_type = "support"
+                topic_title = "General Inquiry"
+            
+            # Create topic
+            topic_id = str(uuid.uuid4())
+            topic_doc = {
+                "id": topic_id,
+                "conversation_id": conv["id"],
+                "customer_id": customer["id"],
+                "topic_type": topic_type,
+                "title": topic_title,
+                "status": "open",
+                "device_info": None,
+                "metadata": {"initial_message": data.message[:200]},
+                "step_count": 0,
+                "last_ai_question": None,
+                "last_customer_message": data.message,
+                "created_at": now,
+                "updated_at": now
+            }
+            await db.topics.insert_one(topic_doc)
+            logger.info(f"Auto-created topic: {topic_title} ({topic_type}) for customer {customer['id']}")
+        
         # Save incoming message
         msg_id = str(uuid.uuid4())
         msg_doc = {
