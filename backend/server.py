@@ -1024,30 +1024,277 @@ async def update_ticket_status(ticket_id: str, status: str, user: dict = Depends
         raise HTTPException(status_code=404, detail="Ticket not found")
     return {"message": "Status updated"}
 
-# ============== WHATSAPP ==============
+# ============== WHATSAPP (REAL INTEGRATION) ==============
 
-whatsapp_state = {"connected": False, "phone_number": None, "qr_code": None, "status": "disconnected"}
+WA_SERVICE_URL = os.environ.get('WA_SERVICE_URL', 'http://localhost:3001')
 
-@api_router.get("/whatsapp/status", response_model=WhatsAppStatusResponse)
+class WhatsAppIncoming(BaseModel):
+    phone: str
+    message: str
+    timestamp: Optional[int] = None
+    messageId: Optional[str] = None
+    hasMedia: bool = False
+
+class WhatsAppSyncMessages(BaseModel):
+    phone: str
+    chatName: Optional[str] = None
+    messages: List[Dict[str, Any]]
+
+@api_router.get("/whatsapp/status")
 async def get_whatsapp_status(user: dict = Depends(get_current_user)):
-    if not whatsapp_state["connected"]:
-        whatsapp_state["qr_code"] = f"whatsapp://qr/{uuid.uuid4()}"
-        whatsapp_state["status"] = "waiting_for_scan"
-    return WhatsAppStatusResponse(**whatsapp_state)
+    """Get WhatsApp connection status from Node.js service"""
+    try:
+        response = await asyncio.get_event_loop().run_in_executor(
+            None, lambda: requests.get(f"{WA_SERVICE_URL}/status", timeout=5)
+        )
+        data = response.json()
+        return {
+            "connected": data.get("connected", False),
+            "phone_number": data.get("phone"),
+            "qr_code": data.get("qrCode"),
+            "status": "connected" if data.get("connected") else "waiting_for_scan",
+            "sync_progress": data.get("syncProgress", {})
+        }
+    except Exception as e:
+        logger.error(f"WhatsApp status error: {e}")
+        return {
+            "connected": False,
+            "phone_number": None,
+            "qr_code": None,
+            "status": "service_unavailable",
+            "error": str(e)
+        }
 
-@api_router.post("/whatsapp/connect")
-async def connect_whatsapp(user: dict = Depends(get_current_user)):
-    whatsapp_state["connected"] = True
-    whatsapp_state["phone_number"] = "+91 98765 43210"
-    whatsapp_state["status"] = "connected"
-    whatsapp_state["qr_code"] = None
-    return {"message": "WhatsApp connected successfully", "status": whatsapp_state}
+@api_router.get("/whatsapp/qr")
+async def get_whatsapp_qr(user: dict = Depends(get_current_user)):
+    """Get QR code for WhatsApp login"""
+    try:
+        response = await asyncio.get_event_loop().run_in_executor(
+            None, lambda: requests.get(f"{WA_SERVICE_URL}/qr", timeout=5)
+        )
+        return response.json()
+    except Exception as e:
+        return {"error": str(e), "qrCode": None}
 
 @api_router.post("/whatsapp/disconnect")
 async def disconnect_whatsapp(user: dict = Depends(get_current_user)):
-    whatsapp_state["connected"] = False
-    whatsapp_state["phone_number"] = None
-    whatsapp_state["status"] = "disconnected"
+    """Disconnect WhatsApp session"""
+    try:
+        response = await asyncio.get_event_loop().run_in_executor(
+            None, lambda: requests.post(f"{WA_SERVICE_URL}/disconnect", timeout=10)
+        )
+        return response.json()
+    except Exception as e:
+        return {"error": str(e)}
+
+@api_router.post("/whatsapp/reconnect")
+async def reconnect_whatsapp(user: dict = Depends(get_current_user)):
+    """Reconnect WhatsApp (new QR)"""
+    try:
+        response = await asyncio.get_event_loop().run_in_executor(
+            None, lambda: requests.post(f"{WA_SERVICE_URL}/reconnect", timeout=10)
+        )
+        return response.json()
+    except Exception as e:
+        return {"error": str(e)}
+
+@api_router.post("/whatsapp/send")
+async def send_whatsapp_message(phone: str, message: str, user: dict = Depends(get_current_user)):
+    """Send message via WhatsApp"""
+    try:
+        response = await asyncio.get_event_loop().run_in_executor(
+            None, lambda: requests.post(f"{WA_SERVICE_URL}/send", json={"phone": phone, "message": message}, timeout=30)
+        )
+        return response.json()
+    except Exception as e:
+        return {"error": str(e)}
+
+@api_router.post("/whatsapp/incoming")
+async def handle_incoming_whatsapp(data: WhatsAppIncoming):
+    """Handle incoming WhatsApp message from Node.js service"""
+    try:
+        phone = data.phone.replace("+", "").replace(" ", "")
+        if not phone.startswith("91"):
+            phone = "91" + phone
+        phone_formatted = f"+{phone[:2]} {phone[2:7]} {phone[7:]}"
+        
+        # Find or create customer
+        customer = await db.customers.find_one({"phone": {"$regex": phone[-10:]}}, {"_id": 0})
+        if not customer:
+            customer_id = str(uuid.uuid4())
+            now = datetime.now(timezone.utc).isoformat()
+            customer = {
+                "id": customer_id,
+                "name": f"WhatsApp {phone_formatted}",
+                "phone": phone_formatted,
+                "customer_type": "individual",
+                "addresses": [],
+                "preferences": {"communication": "whatsapp"},
+                "purchase_history": [],
+                "devices": [],
+                "tags": ["whatsapp", "new"],
+                "notes": "",
+                "total_spent": 0.0,
+                "last_interaction": now,
+                "created_at": now
+            }
+            await db.customers.insert_one(customer)
+            logger.info(f"Created new customer: {phone_formatted}")
+        
+        # Find or create conversation
+        conv = await db.conversations.find_one({"customer_id": customer["id"]})
+        now = datetime.now(timezone.utc).isoformat()
+        if not conv:
+            conv_id = str(uuid.uuid4())
+            conv = {
+                "id": conv_id,
+                "customer_id": customer["id"],
+                "customer_name": customer["name"],
+                "customer_phone": customer["phone"],
+                "channel": "whatsapp",
+                "status": "active",
+                "last_message": data.message,
+                "last_message_at": now,
+                "unread_count": 1,
+                "created_at": now
+            }
+            await db.conversations.insert_one(conv)
+        else:
+            await db.conversations.update_one(
+                {"id": conv["id"]},
+                {"$set": {"last_message": data.message, "last_message_at": now}, "$inc": {"unread_count": 1}}
+            )
+        
+        # Save message
+        msg_id = str(uuid.uuid4())
+        msg_doc = {
+            "id": msg_id,
+            "conversation_id": conv["id"],
+            "content": data.message,
+            "sender_type": "customer",
+            "message_type": "text",
+            "attachments": [],
+            "wa_message_id": data.messageId,
+            "created_at": now
+        }
+        await db.messages.insert_one(msg_doc)
+        
+        # Update customer last interaction
+        await db.customers.update_one(
+            {"id": customer["id"]},
+            {"$set": {"last_interaction": now}}
+        )
+        
+        logger.info(f"Incoming message from {phone_formatted}: {data.message[:50]}...")
+        
+        return {
+            "success": True,
+            "customer_id": customer["id"],
+            "conversation_id": conv["id"],
+            "message_id": msg_id
+        }
+    except Exception as e:
+        logger.error(f"Error handling incoming message: {e}")
+        return {"success": False, "error": str(e)}
+
+@api_router.post("/whatsapp/sync-messages")
+async def sync_whatsapp_messages(data: WhatsAppSyncMessages):
+    """Sync historical messages from WhatsApp"""
+    try:
+        phone = data.phone.replace("+", "").replace(" ", "")
+        if not phone.startswith("91") and len(phone) == 10:
+            phone = "91" + phone
+        phone_formatted = f"+{phone[:2]} {phone[2:7]} {phone[7:]}" if len(phone) >= 12 else phone
+        
+        # Find or create customer
+        customer = await db.customers.find_one({"phone": {"$regex": phone[-10:]}}, {"_id": 0})
+        if not customer:
+            customer_id = str(uuid.uuid4())
+            now = datetime.now(timezone.utc).isoformat()
+            customer = {
+                "id": customer_id,
+                "name": data.chatName or f"WhatsApp {phone_formatted}",
+                "phone": phone_formatted,
+                "customer_type": "individual",
+                "addresses": [],
+                "preferences": {"communication": "whatsapp"},
+                "purchase_history": [],
+                "devices": [],
+                "tags": ["whatsapp", "synced"],
+                "notes": "",
+                "total_spent": 0.0,
+                "last_interaction": now,
+                "created_at": now
+            }
+            await db.customers.insert_one(customer)
+        elif data.chatName and customer["name"].startswith("WhatsApp"):
+            # Update name if we have a better one
+            await db.customers.update_one({"id": customer["id"]}, {"$set": {"name": data.chatName}})
+            customer["name"] = data.chatName
+        
+        # Find or create conversation
+        conv = await db.conversations.find_one({"customer_id": customer["id"]})
+        now = datetime.now(timezone.utc).isoformat()
+        if not conv:
+            conv_id = str(uuid.uuid4())
+            conv = {
+                "id": conv_id,
+                "customer_id": customer["id"],
+                "customer_name": customer["name"],
+                "customer_phone": customer["phone"],
+                "channel": "whatsapp",
+                "status": "active",
+                "last_message": None,
+                "last_message_at": now,
+                "unread_count": 0,
+                "created_at": now
+            }
+            await db.conversations.insert_one(conv)
+        
+        # Sync messages (skip duplicates)
+        synced_count = 0
+        for msg in data.messages:
+            existing = await db.messages.find_one({"wa_message_id": msg.get("id")})
+            if existing:
+                continue
+            
+            msg_id = str(uuid.uuid4())
+            timestamp = datetime.fromtimestamp(msg.get("timestamp", 0), tz=timezone.utc).isoformat() if msg.get("timestamp") else now
+            msg_doc = {
+                "id": msg_id,
+                "conversation_id": conv["id"],
+                "content": msg.get("body", ""),
+                "sender_type": "ai" if msg.get("fromMe") else "customer",
+                "message_type": "media" if msg.get("hasMedia") else "text",
+                "attachments": [],
+                "wa_message_id": msg.get("id"),
+                "created_at": timestamp
+            }
+            await db.messages.insert_one(msg_doc)
+            synced_count += 1
+        
+        # Update conversation with latest message
+        if data.messages:
+            latest = max(data.messages, key=lambda x: x.get("timestamp", 0))
+            await db.conversations.update_one(
+                {"id": conv["id"]},
+                {"$set": {
+                    "last_message": latest.get("body", "")[:100],
+                    "last_message_at": datetime.fromtimestamp(latest.get("timestamp", 0), tz=timezone.utc).isoformat() if latest.get("timestamp") else now,
+                    "customer_name": customer["name"]
+                }}
+            )
+        
+        logger.info(f"Synced {synced_count} messages for {phone_formatted}")
+        return {"success": True, "synced": synced_count}
+    except Exception as e:
+        logger.error(f"Error syncing messages: {e}")
+        return {"success": False, "error": str(e)}
+
+@api_router.post("/whatsapp/simulate-message")
+async def simulate_whatsapp_message(phone: str, message: str, user: dict = Depends(get_current_user)):
+    """Simulate receiving a WhatsApp message for testing"""
+    return await handle_incoming_whatsapp(WhatsAppIncoming(phone=phone, message=message))
     return {"message": "WhatsApp disconnected"}
 
 @api_router.post("/whatsapp/simulate-message")
