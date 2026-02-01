@@ -6,6 +6,7 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Switch } from "../components/ui/switch";
 import { Separator } from "../components/ui/separator";
+import { Textarea } from "../components/ui/textarea";
 import { toast } from "sonner";
 import {
   Settings as SettingsIcon,
@@ -15,6 +16,7 @@ import {
   Bell,
   Save,
   RefreshCw,
+  FileText,
 } from "lucide-react";
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
