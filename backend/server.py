@@ -569,34 +569,86 @@ def parse_lead_injection_command(message: str) -> Optional[Dict]:
 # ============== AI AUTO-REPLY HELPERS ==============
 
 async def generate_ai_reply(customer_id: str, conversation_id: str, message: str) -> str:
-    """Generate AI reply for a customer message - STATE-DRIVEN CONVERSATION SYSTEM"""
+    """Generate AI reply for a customer message - CONTEXT-AWARE SYSTEM"""
     try:
         # Load customer context
         customer = await db.customers.find_one({"id": customer_id}, {"_id": 0})
         if not customer:
             return None
         
-        # ========== RULE 1: ACTIVE TOPIC LOCK ==========
-        # Get the ACTIVE topic (most recent open/in_progress topic) - AI must stay locked to this
+        # Get active topic for this customer
         active_topic = await db.topics.find_one(
             {"customer_id": customer_id, "status": {"$in": ["open", "in_progress"]}},
             {"_id": 0},
             sort=[("created_at", -1)]
         )
         
-        # Determine the conversation FLOW based on active topic
-        flow_type = "general"
+        # Load recent conversation history - THIS IS CRITICAL
+        recent_messages = await db.messages.find(
+            {"conversation_id": conversation_id},
+            {"_id": 0}
+        ).sort("created_at", -1).limit(15).to_list(15)
+        
+        # Build conversation history string
+        history_lines = []
+        for m in reversed(recent_messages):
+            sender = "Customer" if m.get("sender_type") == "customer" else "You"
+            content = m.get("content", "")[:200]
+            history_lines.append(f"{sender}: {content}")
+        
+        conversation_history = "\n".join(history_lines) if history_lines else "No previous messages"
+        
+        # Determine topic type
+        topic_info = ""
         if active_topic:
-            topic_type = active_topic.get("topic_type", "").lower()
-            topic_title = active_topic.get("title", "").lower()
-            
-            # Determine flow from topic
-            if any(word in topic_type or word in topic_title for word in ["repair", "service", "fix", "broken", "issue", "problem", "damage"]):
-                flow_type = "repair"
-            elif any(word in topic_type or word in topic_title for word in ["buy", "purchase", "price", "cost", "order", "inquiry"]):
-                flow_type = "sales"
-            else:
-                flow_type = "support"
+            topic_info = f"Current Topic: {active_topic.get('title', 'General')}"
+        
+        # Simple, focused prompt
+        system_prompt = f"""You are a helpful assistant for an Apple/electronics store. You help with sales and repairs.
+
+CUSTOMER: {customer.get('name', 'Customer')}
+{topic_info}
+
+CONVERSATION SO FAR:
+{conversation_history}
+
+RULES:
+1. Read the conversation above carefully - DO NOT repeat questions already asked
+2. DO NOT ask about budget unless customer mentions price concerns
+3. Keep replies short (1-2 sentences)
+4. If discussing repairs: ask about the specific issue, device model, or request a photo
+5. If discussing purchases: help them choose the right product
+6. If unsure: say "Let me check and get back to you"
+
+Customer's new message: "{message}"
+
+Your reply (1-2 sentences, continue the conversation naturally):"""
+
+        # Generate response
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"conv-{conversation_id}",
+            system_message=system_prompt
+        ).with_model("openai", "gpt-5.2")
+        
+        user_msg = UserMessage(text=message)
+        response = await chat.send_message(user_msg)
+        
+        # Update topic if exists
+        if active_topic:
+            await db.topics.update_one(
+                {"id": active_topic["id"]},
+                {"$set": {
+                    "last_customer_message": message,
+                    "updated_at": datetime.now(timezone.utc).isoformat()
+                }}
+            )
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"AI reply error: {e}")
+        return None
         
         # ========== RULE 2: INTENT SWITCH GUARD ==========
         # Only allow topic switch on explicit signals
