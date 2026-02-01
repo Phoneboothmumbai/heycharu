@@ -73,7 +73,7 @@ const OrdersPage = () => {
   const [orders, setOrders] = useState([]);
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [selectedTicket, setSelectedTicket] = useState(null);
 
@@ -158,7 +158,7 @@ const OrdersPage = () => {
               <SelectValue placeholder="All Statuses" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Statuses</SelectItem>
+              <SelectItem value="all">All Statuses</SelectItem>
               {orderStatuses.map((status) => (
                 <SelectItem key={status} value={status} className="capitalize">
                   {status}
