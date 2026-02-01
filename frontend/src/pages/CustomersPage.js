@@ -151,8 +151,17 @@ const CustomersPage = () => {
           ) : (
             <div className="divide-y divide-border">
               {customers.map(c => (
-                <div key={c.id} onClick={() => setSelectedCustomer(c)} className="flex items-center gap-4 p-4 hover:bg-accent cursor-pointer transition-colors" data-testid={`customer-row-${c.id}`}>
-                  <Avatar className="w-12 h-12"><AvatarFallback className="bg-primary/10 text-primary text-lg">{c.name?.charAt(0)?.toUpperCase()}</AvatarFallback></Avatar>
+                <div 
+                  key={c.id} 
+                  onClick={() => navigate(`/customers/${c.id}`)} 
+                  className="flex items-center gap-4 p-4 hover:bg-accent cursor-pointer transition-colors" 
+                  data-testid={`customer-row-${c.id}`}
+                >
+                  <Avatar className="w-12 h-12">
+                    <AvatarFallback className="bg-primary/10 text-primary text-lg">
+                      {c.name?.charAt(0)?.toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="font-semibold truncate">{c.name}</p>
@@ -169,48 +178,21 @@ const CustomersPage = () => {
                     </p>
                     <p className="text-xs text-muted-foreground">Total Spent</p>
                   </div>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="hidden sm:flex"
+                    onClick={(e) => { e.stopPropagation(); navigate(`/customers/${c.id}`); }}
+                    data-testid={`view-360-btn-${c.id}`}
+                  >
+                    <Eye className="w-4 h-4 mr-1" />View 360°
+                  </Button>
                 </div>
               ))}
             </div>
           )}
         </CardContent>
       </Card>
-
-      <Sheet open={!!selectedCustomer} onOpenChange={() => setSelectedCustomer(null)}>
-        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
-          {selectedCustomer && (
-            <>
-              <SheetHeader className="pb-6">
-                <div className="flex items-center gap-4">
-                  <Avatar className="w-16 h-16"><AvatarFallback className="bg-primary/10 text-primary text-2xl">{selectedCustomer.name?.charAt(0)?.toUpperCase()}</AvatarFallback></Avatar>
-                  <div>
-                    <SheetTitle className="text-xl">{selectedCustomer.name}</SheetTitle>
-                    <Badge className={TypeColors[selectedCustomer.customer_type]}>{selectedCustomer.customer_type}</Badge>
-                  </div>
-                </div>
-              </SheetHeader>
-              <div className="space-y-6">
-                <div className="space-y-2">
-                  <p className="flex items-center gap-3 text-sm"><Phone className="w-4 h-4 text-muted-foreground" />{selectedCustomer.phone}</p>
-                  {selectedCustomer.email && <p className="flex items-center gap-3 text-sm"><Mail className="w-4 h-4 text-muted-foreground" />{selectedCustomer.email}</p>}
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <Card className="p-4">
-                    <p className="text-xs text-muted-foreground">Total Spent</p>
-                    <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400 flex items-center"><IndianRupee className="w-5 h-5" />{(selectedCustomer.total_spent || 0).toLocaleString('en-IN')}</p>
-                  </Card>
-                  <Card className="p-4">
-                    <p className="text-xs text-muted-foreground">Orders</p>
-                    <p className="text-xl font-bold">{selectedCustomer.purchase_history?.length || 0}</p>
-                  </Card>
-                </div>
-                {selectedCustomer.notes && <div className="space-y-2"><h3 className="text-sm font-semibold text-muted-foreground uppercase">Notes</h3><p className="text-sm bg-accent p-3 rounded-lg">{selectedCustomer.notes}</p></div>}
-                <Button variant="destructive" onClick={() => handleDelete(selectedCustomer.id)} className="w-full" data-testid="delete-customer-btn">Delete Customer</Button>
-              </div>
-            </>
-          )}
-        </SheetContent>
-      </Sheet>
     </div>
   );
 };
