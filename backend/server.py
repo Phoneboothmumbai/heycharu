@@ -1520,18 +1520,98 @@ async def send_whatsapp_message(phone: str, message: str, user: dict = Depends(g
 
 @api_router.post("/whatsapp/incoming")
 async def handle_incoming_whatsapp(data: WhatsAppIncoming):
-    """Handle incoming WhatsApp message from Node.js service"""
+    """Handle incoming WhatsApp message from Node.js service
+    
+    This handler:
+    1. Checks if number is EXCLUDED (silent monitoring - no reply)
+    2. Checks if message is from OWNER with lead injection command
+    3. Otherwise, processes normally and sends AI auto-reply
+    """
     try:
         phone = data.phone.replace("+", "").replace(" ", "")
         if not phone.startswith("91"):
             phone = "91" + phone
         phone_formatted = f"+{phone[:2]} {phone[2:7]} {phone[7:]}"
         
+        now = datetime.now(timezone.utc).isoformat()
+        
+        # ========== CHECK 1: Is this number EXCLUDED? ==========
+        is_excluded = await is_number_excluded(phone)
+        if is_excluded:
+            exclusion_info = await get_excluded_number_info(phone)
+            logger.info(f"SILENT MODE: Message from excluded number {phone_formatted} (Tag: {exclusion_info.get('tag', 'unknown')})")
+            
+            # Still save the message for reference, but DON'T reply
+            # Find or create a "silent" record for this number
+            silent_record = await db.silent_messages.find_one({"phone": {"$regex": phone[-10:]}})
+            if not silent_record:
+                silent_id = str(uuid.uuid4())
+                silent_record = {
+                    "id": silent_id,
+                    "phone": phone_formatted,
+                    "tag": exclusion_info.get("tag", "other"),
+                    "messages": [],
+                    "created_at": now
+                }
+                await db.silent_messages.insert_one(silent_record)
+            
+            # Append message to silent record
+            await db.silent_messages.update_one(
+                {"phone": {"$regex": phone[-10:]}},
+                {"$push": {"messages": {
+                    "content": data.message,
+                    "timestamp": now,
+                    "has_media": data.hasMedia
+                }}}
+            )
+            
+            return {
+                "success": True,
+                "mode": "silent",
+                "message": "Message recorded (excluded number - no reply sent)",
+                "tag": exclusion_info.get("tag", "other")
+            }
+        
+        # ========== CHECK 2: Is this a LEAD INJECTION command from owner? ==========
+        # Get owner's phone from settings
+        settings = await db.settings.find_one({"type": "global"}, {"_id": 0})
+        owner_phone = settings.get("owner_phone", "").replace("+", "").replace(" ", "").replace("-", "") if settings else ""
+        
+        if owner_phone and phone[-10:] == owner_phone[-10:]:
+            # This is from the owner - check for lead injection command
+            lead_data = parse_lead_injection_command(data.message)
+            if lead_data:
+                logger.info(f"LEAD INJECTION: Owner command detected - {lead_data}")
+                
+                # Process lead injection
+                # Create a fake user for the API call
+                owner_user = {"name": "Owner (WhatsApp)", "id": "owner"}
+                
+                # Inject the lead
+                lead_result = await inject_lead_internal(
+                    customer_name=lead_data["customer_name"],
+                    phone=lead_data["phone"],
+                    product_interest=lead_data["product_interest"],
+                    notes=f"Injected via WhatsApp command: {data.message}",
+                    created_by="Owner (WhatsApp)"
+                )
+                
+                # Send confirmation to owner
+                confirm_msg = f"✓ Lead created for {lead_data['customer_name']} ({lead_data['phone']}). AI has initiated contact about {lead_data['product_interest']}."
+                await send_whatsapp_message(phone, confirm_msg)
+                
+                return {
+                    "success": True,
+                    "mode": "lead_injection",
+                    "lead_id": lead_result.get("lead_id"),
+                    "message": "Lead injected and outbound message sent"
+                }
+        
+        # ========== NORMAL PROCESSING: Create/update customer and conversation ==========
         # Find or create customer
         customer = await db.customers.find_one({"phone": {"$regex": phone[-10:]}}, {"_id": 0})
         if not customer:
             customer_id = str(uuid.uuid4())
-            now = datetime.now(timezone.utc).isoformat()
             customer = {
                 "id": customer_id,
                 "name": f"WhatsApp {phone_formatted}",
@@ -1552,7 +1632,6 @@ async def handle_incoming_whatsapp(data: WhatsAppIncoming):
         
         # Find or create conversation
         conv = await db.conversations.find_one({"customer_id": customer["id"]})
-        now = datetime.now(timezone.utc).isoformat()
         if not conv:
             conv_id = str(uuid.uuid4())
             conv = {
@@ -1574,7 +1653,7 @@ async def handle_incoming_whatsapp(data: WhatsAppIncoming):
                 {"$set": {"last_message": data.message, "last_message_at": now}, "$inc": {"unread_count": 1}}
             )
         
-        # Save message
+        # Save incoming message
         msg_id = str(uuid.uuid4())
         msg_doc = {
             "id": msg_id,
@@ -1596,15 +1675,177 @@ async def handle_incoming_whatsapp(data: WhatsAppIncoming):
         
         logger.info(f"Incoming message from {phone_formatted}: {data.message[:50]}...")
         
+        # ========== AI AUTO-REPLY ==========
+        # Check if auto-reply is enabled in settings
+        auto_reply_enabled = settings.get("auto_reply", True) if settings else True
+        
+        ai_reply_sent = False
+        ai_response = None
+        
+        if auto_reply_enabled:
+            # Generate AI response
+            ai_response = await generate_ai_reply(customer["id"], conv["id"], data.message)
+            
+            if ai_response:
+                # Send via WhatsApp
+                reply_sent = await send_whatsapp_message(phone, ai_response)
+                
+                if reply_sent:
+                    # Save AI reply
+                    reply_id = str(uuid.uuid4())
+                    reply_now = datetime.now(timezone.utc).isoformat()
+                    reply_doc = {
+                        "id": reply_id,
+                        "conversation_id": conv["id"],
+                        "content": ai_response,
+                        "sender_type": "ai",
+                        "message_type": "text",
+                        "attachments": [],
+                        "created_at": reply_now
+                    }
+                    await db.messages.insert_one(reply_doc)
+                    
+                    # Update conversation
+                    await db.conversations.update_one(
+                        {"id": conv["id"]},
+                        {"$set": {"last_message": ai_response, "last_message_at": reply_now}}
+                    )
+                    
+                    ai_reply_sent = True
+                    logger.info(f"AI reply sent to {phone_formatted}")
+        
         return {
             "success": True,
+            "mode": "normal",
             "customer_id": customer["id"],
             "conversation_id": conv["id"],
-            "message_id": msg_id
+            "message_id": msg_id,
+            "ai_reply_sent": ai_reply_sent,
+            "ai_response": ai_response[:50] + "..." if ai_response and len(ai_response) > 50 else ai_response
         }
     except Exception as e:
         logger.error(f"Error handling incoming message: {e}")
         return {"success": False, "error": str(e)}
+
+async def inject_lead_internal(customer_name: str, phone: str, product_interest: str, notes: str, created_by: str) -> Dict:
+    """Internal function to inject a lead (used by both API and WhatsApp command)"""
+    now = datetime.now(timezone.utc).isoformat()
+    
+    # Normalize phone
+    phone_clean = phone.replace(" ", "").replace("-", "")
+    if not phone_clean.startswith("+"):
+        if len(phone_clean) == 10:
+            phone_clean = "+91" + phone_clean
+        elif phone_clean.startswith("91") and len(phone_clean) == 12:
+            phone_clean = "+" + phone_clean
+    phone_formatted = f"{phone_clean[:3]} {phone_clean[3:8]} {phone_clean[8:]}" if len(phone_clean) >= 13 else phone_clean
+    
+    # Create or find customer
+    existing_customer = await db.customers.find_one({"phone": {"$regex": phone_clean[-10:]}}, {"_id": 0})
+    
+    if existing_customer:
+        customer = existing_customer
+        customer_id = customer["id"]
+    else:
+        customer_id = str(uuid.uuid4())
+        customer = {
+            "id": customer_id,
+            "name": customer_name,
+            "phone": phone_formatted,
+            "customer_type": "individual",
+            "addresses": [],
+            "preferences": {"communication": "whatsapp"},
+            "purchase_history": [],
+            "devices": [],
+            "tags": ["lead", "owner-injected"],
+            "notes": f"Lead injected by {created_by}: {product_interest}",
+            "total_spent": 0.0,
+            "last_interaction": now,
+            "created_at": now
+        }
+        await db.customers.insert_one(customer)
+    
+    # Create conversation
+    conv_id = str(uuid.uuid4())
+    conv = {
+        "id": conv_id,
+        "customer_id": customer_id,
+        "customer_name": customer["name"],
+        "customer_phone": customer["phone"],
+        "channel": "whatsapp",
+        "status": "active",
+        "last_message": None,
+        "last_message_at": now,
+        "unread_count": 0,
+        "source": "owner-injected",
+        "created_at": now
+    }
+    await db.conversations.insert_one(conv)
+    
+    # Create topic
+    topic_id = str(uuid.uuid4())
+    topic = {
+        "id": topic_id,
+        "conversation_id": conv_id,
+        "customer_id": customer_id,
+        "topic_type": "product_inquiry",
+        "title": f"Interest in {product_interest}",
+        "status": "open",
+        "device_info": None,
+        "metadata": {"product": product_interest, "source": "owner-injected"},
+        "created_at": now,
+        "updated_at": now
+    }
+    await db.topics.insert_one(topic)
+    
+    # Generate outbound message
+    product = await db.products.find_one(
+        {"name": {"$regex": product_interest, "$options": "i"}, "is_active": True},
+        {"_id": 0}
+    )
+    
+    if product:
+        outbound_msg = f"Hi {customer['name'].split()[0]}! This is from the store. I understand you're interested in the {product['name']}. It's available at ₹{product['base_price']:,.0f}. Would you like me to share more details?"
+    else:
+        outbound_msg = f"Hi {customer['name'].split()[0]}! This is from the store. I understand you're interested in {product_interest}. I'd be happy to help you with the details. What would you like to know?"
+    
+    # Send message
+    message_sent = await send_whatsapp_message(phone_clean, outbound_msg)
+    
+    if message_sent:
+        msg_id = str(uuid.uuid4())
+        msg_doc = {
+            "id": msg_id,
+            "conversation_id": conv_id,
+            "topic_id": topic_id,
+            "content": outbound_msg,
+            "sender_type": "ai",
+            "message_type": "text",
+            "attachments": [],
+            "created_at": now
+        }
+        await db.messages.insert_one(msg_doc)
+        await db.conversations.update_one({"id": conv_id}, {"$set": {"last_message": outbound_msg, "last_message_at": now}})
+    
+    # Create lead record
+    lead_id = str(uuid.uuid4())
+    lead = {
+        "id": lead_id,
+        "customer_id": customer_id,
+        "customer_name": customer["name"],
+        "phone": phone_clean,
+        "product_interest": product_interest,
+        "conversation_id": conv_id,
+        "topic_id": topic_id,
+        "outbound_message_sent": message_sent,
+        "status": "in_progress" if message_sent else "pending",
+        "notes": notes,
+        "created_at": now,
+        "created_by": created_by
+    }
+    await db.lead_injections.insert_one(lead)
+    
+    return {"lead_id": lead_id, "customer_id": customer_id, "conversation_id": conv_id}
 
 @api_router.post("/whatsapp/sync-messages")
 async def sync_whatsapp_messages(data: WhatsAppSyncMessages):
