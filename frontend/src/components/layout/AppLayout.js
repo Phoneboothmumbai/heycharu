@@ -5,40 +5,42 @@ import { useAuth } from "../../contexts/AuthContext";
 import { Button } from "../ui/button";
 import { Avatar, AvatarFallback } from "../ui/avatar";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
-import { LayoutDashboard, Users, MessageSquare, Package, ShoppingCart, Settings, Sun, Moon, LogOut, Menu, X, Brain, Smartphone } from "lucide-react";
+import { LayoutDashboard, Users, MessageSquare, Package, ShoppingCart, Settings, Sun, Moon, LogOut, Menu, X, Brain, Smartphone, BookOpen, AlertTriangle } from "lucide-react";
 
-const navItems = [
+var navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: Users, label: "Customers", path: "/customers" },
   { icon: MessageSquare, label: "Conversations", path: "/conversations" },
   { icon: Package, label: "Products", path: "/products" },
   { icon: ShoppingCart, label: "Orders", path: "/orders" },
   { icon: Smartphone, label: "WhatsApp", path: "/whatsapp" },
+  { icon: BookOpen, label: "Knowledge Base", path: "/knowledge-base" },
+  { icon: AlertTriangle, label: "Escalations", path: "/escalations" },
   { icon: Settings, label: "Settings", path: "/settings" },
 ];
 
 function AppLayout(props) {
-  const children = props.children;
-  const themeContext = useTheme();
-  const theme = themeContext.theme;
-  const toggleTheme = themeContext.toggleTheme;
-  const authContext = useAuth();
-  const user = authContext.user;
-  const logout = authContext.logout;
-  const location = useLocation();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  var children = props.children;
+  var themeContext = useTheme();
+  var theme = themeContext.theme;
+  var toggleTheme = themeContext.toggleTheme;
+  var authContext = useAuth();
+  var user = authContext.user;
+  var logout = authContext.logout;
+  var location = useLocation();
+  var [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const isActive = function(path) {
+  function isActive(path) {
     return location.pathname === path || (path === "/dashboard" && location.pathname === "/");
-  };
+  }
 
-  const closeSidebar = function() {
+  function closeSidebar() {
     setSidebarOpen(false);
-  };
+  }
 
-  const openSidebar = function() {
+  function openSidebar() {
     setSidebarOpen(true);
-  };
+  }
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -60,7 +62,7 @@ function AppLayout(props) {
             {navItems.map(function(item) {
               var Icon = item.icon;
               return (
-                <Link key={item.path} to={item.path} onClick={closeSidebar} className={"sidebar-link " + (isActive(item.path) ? "active" : "")} data-testid={"nav-" + item.label.toLowerCase()}>
+                <Link key={item.path} to={item.path} onClick={closeSidebar} className={"sidebar-link " + (isActive(item.path) ? "active" : "")} data-testid={"nav-" + item.label.toLowerCase().replace(/\s/g, '-')}>
                   <Icon className="w-5 h-5" />
                   <span>{item.label}</span>
                 </Link>
@@ -103,7 +105,7 @@ function AppLayout(props) {
           <Button variant="ghost" size="icon" className="lg:hidden mr-2" onClick={openSidebar} data-testid="mobile-menu-btn">
             <Menu className="w-5 h-5" />
           </Button>
-          <h1 className="text-lg font-semibold capitalize">{location.pathname === "/" ? "Dashboard" : location.pathname.slice(1)}</h1>
+          <h1 className="text-lg font-semibold capitalize">{location.pathname === "/" ? "Dashboard" : location.pathname.slice(1).replace(/-/g, ' ')}</h1>
           <div className="ml-auto">
             <Button variant="ghost" size="icon" onClick={toggleTheme} className="hidden lg:flex" data-testid="header-theme-toggle">
               {theme === "light" ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
