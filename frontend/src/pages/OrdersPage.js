@@ -83,7 +83,7 @@ const OrdersPage = () => {
 
   const fetchData = async () => {
     try {
-      const params = statusFilter ? `?status=${statusFilter}` : "";
+      const params = (statusFilter && statusFilter !== "all") ? `?status=${statusFilter}` : "";
       const [ordersRes, ticketsRes] = await Promise.all([
         axios.get(`${API_URL}/api/orders${params}`),
         axios.get(`${API_URL}/api/tickets${params}`),
