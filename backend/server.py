@@ -2306,6 +2306,127 @@ async def update_settings(settings: Dict[str, Any], user: dict = Depends(get_cur
     await db.settings.update_one({"type": "global"}, {"$set": settings}, upsert=True)
     return {"message": "Settings updated"}
 
+# ============== AUTO-MESSAGING SETTINGS ==============
+
+@api_router.get("/auto-messages/settings")
+async def get_auto_message_settings_api(user: dict = Depends(get_current_user)):
+    """Get auto-messaging settings and templates"""
+    return await get_auto_message_settings()
+
+@api_router.put("/auto-messages/settings")
+async def update_auto_message_settings_api(settings: Dict[str, Any], user: dict = Depends(get_current_user)):
+    """Update auto-messaging settings"""
+    await db.auto_message_settings.update_one(
+        {"type": "global"},
+        {"$set": settings},
+        upsert=True
+    )
+    return {"message": "Auto-message settings updated"}
+
+@api_router.get("/auto-messages/templates")
+async def get_auto_message_templates(user: dict = Depends(get_current_user)):
+    """Get all message templates"""
+    settings = await get_auto_message_settings()
+    return settings.get("templates", DEFAULT_TEMPLATES)
+
+@api_router.put("/auto-messages/templates/{trigger_type}")
+async def update_auto_message_template(
+    trigger_type: str,
+    template: str,
+    user: dict = Depends(get_current_user)
+):
+    """Update a specific message template"""
+    valid_triggers = list(DEFAULT_TEMPLATES.keys())
+    if trigger_type not in valid_triggers:
+        raise HTTPException(status_code=400, detail=f"Invalid trigger type. Valid: {valid_triggers}")
+    
+    await db.auto_message_settings.update_one(
+        {"type": "global"},
+        {"$set": {f"templates.{trigger_type}": template}},
+        upsert=True
+    )
+    return {"message": f"Template for {trigger_type} updated"}
+
+@api_router.get("/auto-messages/history")
+async def get_auto_message_history(
+    customer_id: Optional[str] = None,
+    trigger_type: Optional[str] = None,
+    limit: int = 50,
+    user: dict = Depends(get_current_user)
+):
+    """Get history of sent auto-messages"""
+    query = {}
+    if customer_id:
+        query["customer_id"] = customer_id
+    if trigger_type:
+        query["trigger_type"] = trigger_type
+    
+    messages = await db.auto_messages_sent.find(query, {"_id": 0}).sort("sent_at", -1).limit(limit).to_list(limit)
+    return messages
+
+@api_router.get("/auto-messages/scheduled")
+async def get_scheduled_messages(
+    status: str = "pending",
+    user: dict = Depends(get_current_user)
+):
+    """Get scheduled follow-up messages"""
+    messages = await db.scheduled_messages.find(
+        {"status": status},
+        {"_id": 0}
+    ).sort("scheduled_for", 1).to_list(100)
+    return messages
+
+@api_router.delete("/auto-messages/scheduled/{message_id}")
+async def cancel_scheduled_message(message_id: str, user: dict = Depends(get_current_user)):
+    """Cancel a scheduled message"""
+    result = await db.scheduled_messages.update_one(
+        {"id": message_id, "status": "pending"},
+        {"$set": {"status": "cancelled"}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Scheduled message not found or already processed")
+    return {"message": "Scheduled message cancelled"}
+
+@api_router.post("/auto-messages/test/{trigger_type}")
+async def test_auto_message(
+    trigger_type: str,
+    customer_id: str,
+    conversation_id: str,
+    user: dict = Depends(get_current_user)
+):
+    """Test send an auto-message (for debugging)"""
+    result = await send_auto_message(
+        customer_id=customer_id,
+        conversation_id=conversation_id,
+        trigger_type=trigger_type,
+        template_vars={"topic": "test", "amount": "1,000", "ticket_id": "TEST-001"}
+    )
+    return result
+
+@api_router.post("/auto-messages/schedule-follow-up")
+async def schedule_follow_up_api(
+    customer_id: str,
+    conversation_id: str,
+    topic_id: str,
+    delay_hours: int = 48,
+    user: dict = Depends(get_current_user)
+):
+    """Manually schedule a follow-up message"""
+    # Get topic info
+    topic = await db.topics.find_one({"id": topic_id}, {"_id": 0})
+    topic_title = topic.get("title", "your inquiry") if topic else "your inquiry"
+    
+    scheduled_id = await schedule_follow_up(
+        customer_id=customer_id,
+        conversation_id=conversation_id,
+        topic_id=topic_id,
+        trigger_type="no_response",
+        delay_hours=delay_hours,
+        template_vars={"topic": topic_title}
+    )
+    
+    return {"scheduled_id": scheduled_id, "delay_hours": delay_hours}
+
 # ============== SEED DATA ==============
 
 @api_router.post("/seed")
