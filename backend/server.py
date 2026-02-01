@@ -688,7 +688,9 @@ async def get_auto_message_settings() -> dict:
             "auto_messaging_enabled": True,
             "templates": DEFAULT_TEMPLATES
         }
-        await db.auto_message_settings.insert_one(settings)
+        await db.auto_message_settings.insert_one(settings.copy())
+        # Remove _id if it was added
+        settings.pop("_id", None)
     return settings
 
 async def can_send_auto_message(customer_id: str, topic_id: str = None) -> tuple:
