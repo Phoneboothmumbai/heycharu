@@ -22,11 +22,11 @@ const TypeColors = {
 };
 
 const CustomersPage = () => {
+  const navigate = useNavigate();
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
-  const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", phone: "", customer_type: "individual", notes: "" });
 
