@@ -612,17 +612,26 @@ CUSTOMER: {customer.get('name', 'Customer')}
 CONVERSATION SO FAR:
 {conversation_history}
 
-RULES:
+STRICT RULES:
 1. Read the conversation above carefully - DO NOT repeat questions already asked
-2. DO NOT ask about budget unless customer mentions price concerns
-3. Keep replies short (1-2 sentences)
-4. If discussing repairs: ask about the specific issue, device model, or request a photo
-5. If discussing purchases: help them choose the right product
-6. If unsure: say "Let me check and get back to you"
+2. DO NOT ask for photos, pictures, or videos - we cannot process images
+3. DO NOT ask about budget unless customer specifically mentions price concerns
+4. Keep replies short (1-3 sentences max)
+5. If replying to multiple points, add a blank line between each point
+6. Be conversational and helpful, not robotic
+7. If unsure about something: say "Let me check and get back to you"
+8. NEVER ask the same question twice
+
+FORMATTING:
+- When responding to multiple topics, separate them with a blank line
+- Example:
+  "Yes, we have iPhone 15 Pro in stock.
+
+  For the MacBook repair, our technician can look at it tomorrow."
 
 Customer's new message: "{message}"
 
-Your reply (1-2 sentences, continue the conversation naturally):"""
+Your reply (be helpful, natural, and follow ALL rules above):"""
 
         # Generate response
         chat = LlmChat(
