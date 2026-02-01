@@ -67,32 +67,30 @@ const ConversationsPage = () => {
     setMessageInput("");
 
     try {
+      // Extract phone number from conversation
+      const phone = selectedConversation.customer_phone?.replace(/[^0-9]/g, '') || '';
+      
+      // Send to WhatsApp first
+      if (phone) {
+        try {
+          await axios.post(`${API_URL}/api/whatsapp/send?phone=${encodeURIComponent(phone)}&message=${encodeURIComponent(userMessage)}`);
+          toast.success("Message sent to WhatsApp");
+        } catch (waError) {
+          console.error("WhatsApp send failed:", waError);
+          toast.error("Failed to send via WhatsApp - check connection");
+        }
+      }
+
+      // Save message to database
       await axios.post(`${API_URL}/api/conversations/${selectedConversation.id}/messages`, {
         conversation_id: selectedConversation.id,
         content: userMessage,
-        sender_type: "human",
-        message_type: "text",
-      });
-
-      const aiResponse = await axios.post(`${API_URL}/api/ai/chat`, {
-        customer_id: selectedConversation.customer_id,
-        conversation_id: selectedConversation.id,
-        message: userMessage,
-      });
-
-      await axios.post(`${API_URL}/api/conversations/${selectedConversation.id}/messages`, {
-        conversation_id: selectedConversation.id,
-        content: aiResponse.data.response,
-        sender_type: "ai",
+        sender_type: "agent",
         message_type: "text",
       });
 
       fetchMessages(selectedConversation.id);
       fetchConversations();
-
-      if (aiResponse.data.needs_escalation) {
-        toast.warning("This conversation may need human attention");
-      }
     } catch (error) {
       toast.error("Failed to send message");
     } finally {
