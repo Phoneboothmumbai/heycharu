@@ -46,7 +46,7 @@ function LeadsPage() {
 
   var handleInjectLead = async function() {
     if (!formData.customer_name || !formData.phone || !formData.product_interest) {
-      toast({ title: "Error", description: "Please fill all required fields", variant: "destructive" });
+      toast.error("Please fill all required fields");
       return;
     }
 
@@ -64,20 +64,20 @@ function LeadsPage() {
       var data = await response.json();
       
       if (response.ok) {
-        toast({ 
-          title: "Lead Injected!", 
-          description: data.outbound_message_sent 
-            ? "AI has initiated contact with " + formData.customer_name 
-            : "Lead created. WhatsApp message pending (connect WhatsApp first)."
-        });
+        if (data.outbound_message_sent) {
+          toast.success("Lead Injected! AI has initiated contact with " + formData.customer_name);
+        } else {
+          toast.success("Lead created. WhatsApp message pending (connect WhatsApp first).");
+        }
         setIsDialogOpen(false);
         setFormData({ customer_name: "", phone: "", product_interest: "", notes: "" });
         fetchLeads();
       } else {
-        toast({ title: "Error", description: data.detail || "Failed to inject lead", variant: "destructive" });
+        toast.error(data.detail || "Failed to inject lead");
       }
     } catch (error) {
-      toast({ title: "Error", description: "Failed to inject lead", variant: "destructive" });
+      console.error("Error injecting lead:", error);
+      toast.error("Failed to inject lead");
     } finally {
       setSubmitting(false);
     }
