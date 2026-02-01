@@ -545,29 +545,22 @@ def parse_lead_injection_command(message: str) -> Optional[Dict]:
     - "lead inject iPhone 17 Foram 9969528677"
     - "lead inject CKM - 9820983978 AirPods Pro"
     - "lead inject Rahul 9876543210 MacBook Air M3"
+    - "lead inject iPhone 17\nForam 9969528677" (Product on line 1, Name+Phone on line 2)
     - "Lead: Name - Number - Product"
-    - "Customer name X, number Y is asking for Z"
     """
     import re
     
     # Check if this is a lead inject message
     if not re.search(r'lead\s*inject', message, re.IGNORECASE):
-        # Also check other formats
         if not re.search(r'(customer\s+name|lead\s*:)', message, re.IGNORECASE):
             return None
     
-    # Normalize message - join multiple lines, remove extra spaces
-    normalized = ' '.join(message.strip().split())
-    
     # Extract phone number (mandatory)
-    phone_match = re.search(r'(\d{10,12})', normalized)
+    phone_match = re.search(r'(\d{10,12})', message)
     if not phone_match:
-        return None  # No phone = invalid lead
+        return None
     
     phone = phone_match.group(1)
-    
-    # Remove "lead inject" prefix for easier parsing
-    clean_msg = re.sub(r'lead\s*inject\s*', '', normalized, flags=re.IGNORECASE).strip()
     
     # Product keywords to identify what's a product vs name
     product_keywords = ['iphone', 'macbook', 'ipad', 'airpods', 'watch', 'pro', 'max', 'air', 'mini', 'apple', 'samsung', 'pixel', 'galaxy']
@@ -575,78 +568,89 @@ def parse_lead_injection_command(message: str) -> Optional[Dict]:
     customer_name = "Unknown"
     product_interest = "General Inquiry"
     
-    # Strategy: Split by phone number position
-    phone_pos = clean_msg.find(phone)
-    before_phone = clean_msg[:phone_pos].strip(' -') if phone_pos > 0 else ""
-    after_phone = clean_msg[phone_pos + len(phone):].strip(' -') if phone_pos >= 0 else clean_msg
+    # Remove "lead inject" prefix
+    clean_msg = re.sub(r'lead\s*inject\s*', '', message, flags=re.IGNORECASE).strip()
     
-    # Analyze what's before and after phone
-    before_is_product = any(kw in before_phone.lower() for kw in product_keywords) or (before_phone and re.search(r'\d', before_phone))
-    after_is_product = any(kw in after_phone.lower() for kw in product_keywords) or (after_phone and re.search(r'\d', after_phone))
+    # Split by lines first - this helps with multi-line formats
+    lines = [l.strip() for l in clean_msg.split('\n') if l.strip()]
     
-    # Check if before_phone looks like a name (single word, no numbers)
-    before_is_name = before_phone and re.match(r'^[A-Za-z]+$', before_phone.split()[-1] if before_phone.split() else "")
-    after_is_name = after_phone and re.match(r'^[A-Za-z]+$', after_phone.split()[0] if after_phone.split() else "")
-    
-    if before_phone and after_phone:
-        # Both parts exist
-        if before_is_product and not after_is_product:
+    if len(lines) >= 2:
+        # Multi-line format - analyze each line
+        phone_line_idx = -1
+        for i, line in enumerate(lines):
+            if phone in line:
+                phone_line_idx = i
+                break
+        
+        if phone_line_idx >= 0:
+            phone_line = lines[phone_line_idx]
+            other_lines = [l for i, l in enumerate(lines) if i != phone_line_idx]
+            
+            # Extract name from the phone line (word before or after phone)
+            name_before = re.search(r'([A-Za-z]+)\s*[-]?\s*' + phone, phone_line)
+            name_after = re.search(phone + r'\s*[-]?\s*([A-Za-z]+)', phone_line)
+            
+            if name_before:
+                customer_name = name_before.group(1).capitalize()
+            elif name_after:
+                customer_name = name_after.group(1).capitalize()
+            
+            # Product is likely in the other lines
+            for line in other_lines:
+                if any(kw in line.lower() for kw in product_keywords) or re.search(r'\d', line):
+                    product_interest = line
+                    break
+            
+            # If no product found in other lines, check phone line for remaining text
+            if product_interest == "General Inquiry" and other_lines:
+                product_interest = ' '.join(other_lines)
+    else:
+        # Single line format - normalized
+        normalized = ' '.join(clean_msg.split())
+        
+        phone_pos = normalized.find(phone)
+        before_phone = normalized[:phone_pos].strip(' -') if phone_pos > 0 else ""
+        after_phone = normalized[phone_pos + len(phone):].strip(' -') if phone_pos >= 0 else normalized
+        
+        # Check for name immediately adjacent to phone
+        name_before_match = re.search(r'([A-Za-z]+)\s*$', before_phone)
+        name_after_match = re.search(r'^([A-Za-z]+)', after_phone)
+        
+        before_is_product = any(kw in before_phone.lower() for kw in product_keywords) or re.search(r'\d', before_phone)
+        after_is_product = any(kw in after_phone.lower() for kw in product_keywords) or re.search(r'\d', after_phone)
+        
+        if before_is_product and name_after_match:
             product_interest = before_phone
-            customer_name = after_phone.split()[0] if after_phone else "Unknown"
-        elif after_is_product and not before_is_product:
-            customer_name = before_phone.split()[-1] if before_phone else "Unknown"
+            customer_name = name_after_match.group(1).capitalize()
+        elif after_is_product and name_before_match:
+            customer_name = name_before_match.group(1).capitalize()
             product_interest = after_phone
-        elif before_is_name and after_is_product:
-            customer_name = before_phone.split()[-1]
-            product_interest = after_phone
-        elif after_is_name and before_is_product:
-            product_interest = before_phone
-            customer_name = after_phone.split()[0]
-        else:
-            # Default: before is name-related, after is product
-            if before_phone:
-                customer_name = before_phone.split()[-1]
-            if after_phone:
-                product_interest = after_phone
-    elif before_phone:
-        # Only content before phone - could be "Name Product" or just "Product"
-        words = before_phone.split()
-        if len(words) >= 2:
-            # Check if first word is a name
-            first_word_is_name = not any(kw in words[0].lower() for kw in product_keywords)
-            if first_word_is_name:
-                customer_name = words[0]
+        elif before_phone and after_phone:
+            # Default: first part with products is product, other is name
+            if before_is_product:
+                product_interest = before_phone
+                customer_name = after_phone.split()[0].capitalize() if after_phone else "Unknown"
+            else:
+                customer_name = before_phone.split()[-1].capitalize() if before_phone else "Unknown"
+                product_interest = after_phone if after_phone else "General Inquiry"
+        elif before_phone:
+            # Name at start, product after
+            words = before_phone.split()
+            if len(words) >= 2 and not any(kw in words[0].lower() for kw in product_keywords):
+                customer_name = words[0].capitalize()
                 product_interest = ' '.join(words[1:])
             else:
                 product_interest = before_phone
-        else:
-            product_interest = before_phone
-    elif after_phone:
-        # Only content after phone
-        words = after_phone.split()
-        if len(words) >= 2:
-            last_word_is_name = not any(kw in words[-1].lower() for kw in product_keywords)
-            if last_word_is_name:
-                customer_name = words[-1]
-                product_interest = ' '.join(words[:-1])
-            else:
-                product_interest = after_phone
-        elif words:
-            # Single word after phone - likely name
-            customer_name = words[0]
+        elif after_phone:
+            product_interest = after_phone
     
-    # Clean up name
-    customer_name = re.sub(r'^(mr\.?|mrs\.?|ms\.?|dr\.?)\s*', '', customer_name, flags=re.IGNORECASE).strip()
-    if customer_name and customer_name != "Unknown":
-        customer_name = customer_name.split()[0].capitalize()
-    
-    # Clean up product
+    # Final cleanup
     product_interest = re.sub(r'^(a|an|the)\s+', '', product_interest, flags=re.IGNORECASE).strip()
     if not product_interest:
         product_interest = "General Inquiry"
     
     return {
-        "customer_name": customer_name,
+        "customer_name": customer_name if customer_name else "Unknown",
         "phone": phone,
         "product_interest": product_interest
     }
