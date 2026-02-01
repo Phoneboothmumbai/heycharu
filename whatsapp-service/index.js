@@ -320,10 +320,17 @@ app.get('/qr', (req, res) => {
 app.post('/send', async (req, res) => {
     try {
         const { phone, message } = req.body;
+        console.log('Send API called. Phone:', phone, 'Message length:', message?.length);
+        
+        if (!phone || !message) {
+            return res.status(400).json({ error: 'Phone and message are required' });
+        }
+        
         await sendMessage(phone, message);
         res.json({ success: true });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        console.error('Send API error:', error.message);
+        res.status(500).json({ error: error.message, connected: isReady });
     }
 });
 
