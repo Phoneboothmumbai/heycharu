@@ -651,52 +651,6 @@ Your reply (1-2 sentences, continue the conversation naturally):"""
         return None
 
 async def send_whatsapp_message(phone: str, message: str) -> bool:
-Keep responses to 1-3 sentences maximum.
-
-{products_context}
-
-=== CUSTOMER'S NEW MESSAGE ===
-"{message}"
-
-=== YOUR TASK ===
-1. If this answers your last question, acknowledge and ask the NEXT logical question
-2. Stay in {flow_type.upper()} flow - do not switch
-3. Ask only ONE question
-4. Keep it brief and human
-
-Your reply:"""
-
-        # Generate response
-        chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=f"auto-{conversation_id}",
-            system_message=context
-        ).with_model("openai", "gpt-5.2")
-        
-        user_msg = UserMessage(text=message)
-        response = await chat.send_message(user_msg)
-        
-        # ========== UPDATE TOPIC METADATA ==========
-        # Track conversation step
-        if active_topic:
-            step_count = active_topic.get("step_count", 0) + 1
-            await db.topics.update_one(
-                {"id": active_topic["id"]},
-                {"$set": {
-                    "last_ai_question": response if "?" in response else last_ai_question,
-                    "last_customer_message": message,
-                    "step_count": step_count,
-                    "updated_at": datetime.now(timezone.utc).isoformat()
-                }}
-            )
-        
-        return response
-        
-    except Exception as e:
-        logger.error(f"AI reply error: {e}")
-        return None
-
-async def send_whatsapp_message(phone: str, message: str) -> bool:
     """Send a WhatsApp message via the WhatsApp service"""
     try:
         response = await asyncio.get_event_loop().run_in_executor(
