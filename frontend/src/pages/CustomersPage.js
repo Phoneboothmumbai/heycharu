@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
@@ -7,11 +8,10 @@ import { Label } from "../components/ui/label";
 import { Badge } from "../components/ui/badge";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/dialog";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "../components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Textarea } from "../components/ui/textarea";
 import { toast } from "sonner";
-import { Search, Plus, User, Phone, Mail, IndianRupee } from "lucide-react";
+import { Search, Plus, User, Phone, Mail, IndianRupee, Eye } from "lucide-react";
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
