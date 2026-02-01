@@ -90,10 +90,10 @@ function LeadsPage() {
         method: "PUT",
         headers: { "Authorization": "Bearer " + token }
       });
-      toast({ title: "Status Updated" });
+      toast.success("Status Updated");
       fetchLeads();
     } catch (error) {
-      toast({ title: "Error", description: "Failed to update status", variant: "destructive" });
+      toast.error("Failed to update status");
     }
   };
 
