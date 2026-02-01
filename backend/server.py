@@ -2304,14 +2304,28 @@ async def handle_incoming_whatsapp(data: WhatsAppIncoming):
                 }
         
         # ========== NORMAL PROCESSING: Create/update customer and conversation ==========
-        # Find or create customer
-        customer = await db.customers.find_one({"phone": {"$regex": phone[-10:]}}, {"_id": 0})
+        # Find or create customer - use multiple lookup strategies
+        # Extract last 10 digits for matching
+        phone_last10 = phone[-10:] if len(phone) >= 10 else phone
+        
+        # Try multiple lookup patterns
+        customer = await db.customers.find_one(
+            {"$or": [
+                {"phone": {"$regex": phone_last10}},
+                {"phone": phone},
+                {"phone": phone_formatted}
+            ]},
+            {"_id": 0}
+        )
+        
         if not customer:
             customer_id = str(uuid.uuid4())
+            # Store phone in clean format for easier matching
             customer = {
                 "id": customer_id,
                 "name": f"WhatsApp {phone_formatted}",
-                "phone": phone_formatted,
+                "phone": phone,  # Store clean digits
+                "phone_formatted": phone_formatted,  # Store formatted version
                 "customer_type": "individual",
                 "addresses": [],
                 "preferences": {"communication": "whatsapp"},
@@ -2325,6 +2339,8 @@ async def handle_incoming_whatsapp(data: WhatsAppIncoming):
             }
             await db.customers.insert_one(customer)
             logger.info(f"Created new customer: {phone_formatted}")
+        else:
+            logger.info(f"Found existing customer: {customer.get('name')} ({customer.get('id')})")
         
         # Find or create conversation
         conv = await db.conversations.find_one({"customer_id": customer["id"]})
