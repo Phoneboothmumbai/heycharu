@@ -1816,6 +1816,78 @@ async def delete_product(product_id: str, user: dict = Depends(get_current_user)
         raise HTTPException(status_code=404, detail="Product not found")
     return {"message": "Product deleted"}
 
+@api_router.post("/products/bulk-upload")
+async def bulk_upload_products(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    """Upload products from Excel/CSV file
+    Expected columns: name, sku, category, base_price, description (optional)
+    """
+    import pandas as pd
+    import io
+    
+    try:
+        contents = await file.read()
+        
+        # Determine file type
+        if file.filename.endswith('.csv'):
+            df = pd.read_csv(io.BytesIO(contents))
+        elif file.filename.endswith(('.xlsx', '.xls')):
+            df = pd.read_excel(io.BytesIO(contents))
+        else:
+            raise HTTPException(status_code=400, detail="File must be .csv, .xlsx, or .xls")
+        
+        # Normalize column names
+        df.columns = df.columns.str.lower().str.strip().str.replace(' ', '_')
+        
+        # Validate required columns
+        required = ['name', 'sku', 'category', 'base_price']
+        missing = [c for c in required if c not in df.columns]
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Missing columns: {', '.join(missing)}")
+        
+        now = datetime.now(timezone.utc).isoformat()
+        products_to_insert = []
+        updated_count = 0
+        
+        for _, row in df.iterrows():
+            product_data = {
+                "name": str(row['name']).strip(),
+                "sku": str(row['sku']).strip(),
+                "category": str(row['category']).strip(),
+                "base_price": float(row['base_price']),
+                "description": str(row.get('description', '')).strip() if pd.notna(row.get('description')) else "",
+                "variants": [],
+                "images": [],
+                "specifications": {},
+                "is_active": True,
+                "updated_at": now
+            }
+            
+            # Check if product exists (by SKU)
+            existing = await db.products.find_one({"sku": product_data["sku"]})
+            if existing:
+                await db.products.update_one({"sku": product_data["sku"]}, {"$set": product_data})
+                updated_count += 1
+            else:
+                product_data["id"] = str(uuid.uuid4())
+                product_data["created_at"] = now
+                products_to_insert.append(product_data)
+        
+        if products_to_insert:
+            await db.products.insert_many(products_to_insert)
+        
+        return {
+            "success": True,
+            "inserted": len(products_to_insert),
+            "updated": updated_count,
+            "total": len(df)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Bulk upload error: {e}")
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
 # ============== ORDERS ==============
 
 @api_router.get("/orders", response_model=List[OrderResponse])
