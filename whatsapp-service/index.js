@@ -268,15 +268,25 @@ async function syncMessages() {
 // Send message via WhatsApp
 async function sendMessage(phone, message) {
     if (!sock || !isReady) {
+        console.error('Send failed: WhatsApp not connected. isReady:', isReady, 'sock:', !!sock);
         throw new Error('WhatsApp not connected');
     }
     
-    // Format phone number
-    const jid = phone.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
+    // Format phone number correctly
+    const cleanPhone = formatPhoneNumber(phone);
+    const jid = cleanPhone + '@s.whatsapp.net';
     
-    await sock.sendMessage(jid, { text: message });
-    console.log('Message sent to:', phone);
-    return true;
+    console.log(`Sending message to: ${cleanPhone} (JID: ${jid})`);
+    console.log(`Message preview: ${message.substring(0, 100)}...`);
+    
+    try {
+        const result = await sock.sendMessage(jid, { text: message });
+        console.log('Message sent successfully. ID:', result?.key?.id);
+        return true;
+    } catch (err) {
+        console.error('Send message error:', err.message);
+        throw err;
+    }
 }
 
 // API Routes
