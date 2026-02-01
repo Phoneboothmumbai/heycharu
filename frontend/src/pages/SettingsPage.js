@@ -202,6 +202,43 @@ const SettingsPage = () => {
         </CardContent>
       </Card>
 
+      {/* AI Instructions */}
+      <Card className="border-border/50">
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+              <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div>
+              <CardTitle className="text-lg">AI Instructions</CardTitle>
+              <CardDescription>Custom instructions the AI must follow for every reply</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="ai_instructions">Instructions for AI</Label>
+            <Textarea
+              id="ai_instructions"
+              value={settings.ai_instructions || ""}
+              onChange={(e) => setSettings({ ...settings, ai_instructions: e.target.value })}
+              placeholder="Example:
+- We are a tech/Apple store. Only discuss tech products and services.
+- Never discuss topics unrelated to electronics/tech.
+- Always be polite and professional.
+- If asked about non-tech topics, politely redirect to tech.
+- Our store timings are 10 AM - 8 PM."
+              rows={8}
+              className="resize-none font-mono text-sm"
+              data-testid="ai-instructions-input"
+            />
+            <p className="text-xs text-muted-foreground">
+              These instructions will be included in every AI response. Be specific about what the AI should and shouldn't do.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Follow-up Settings */}
       <Card className="border-border/50">
         <CardHeader>
