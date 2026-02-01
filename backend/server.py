@@ -1654,10 +1654,46 @@ async def update_order_status(order_id: str, status: str, user: dict = Depends(g
     valid_statuses = ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled"]
     if status not in valid_statuses:
         raise HTTPException(status_code=400, detail="Invalid status")
-    result = await db.orders.update_one({"id": order_id}, {"$set": {"status": status}})
-    if result.matched_count == 0:
+    
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
         raise HTTPException(status_code=404, detail="Order not found")
+    
+    await db.orders.update_one({"id": order_id}, {"$set": {"status": status}})
+    
+    # AUTO-MESSAGE: Order status updates
+    if order.get("conversation_id"):
+        if status == "delivered":
+            await send_auto_message(
+                customer_id=order["customer_id"],
+                conversation_id=order["conversation_id"],
+                trigger_type="order_completed"
+            )
+    
     return {"message": "Status updated"}
+
+@api_router.put("/orders/{order_id}/payment")
+async def update_order_payment(order_id: str, payment_status: str, user: dict = Depends(get_current_user)):
+    """Update payment status and send auto-message"""
+    valid_statuses = ["pending", "received", "failed", "refunded"]
+    if payment_status not in valid_statuses:
+        raise HTTPException(status_code=400, detail="Invalid payment status")
+    
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    await db.orders.update_one({"id": order_id}, {"$set": {"payment_status": payment_status}})
+    
+    # AUTO-MESSAGE: Payment received
+    if payment_status == "received" and order.get("conversation_id"):
+        await send_auto_message(
+            customer_id=order["customer_id"],
+            conversation_id=order["conversation_id"],
+            trigger_type="payment_received"
+        )
+    
+    return {"message": "Payment status updated"}
 
 # ============== TICKETS ==============
 
