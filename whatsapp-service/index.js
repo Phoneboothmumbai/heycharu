@@ -25,11 +25,15 @@ let sock = null;
 let currentQR = null;
 let isReady = false;
 let connectedPhone = null;
-let syncProgress = { total: 0, synced: 0, status: 'idle' };
 let connectionStatus = 'disconnected';
 
 // CRITICAL: Connection timestamp - only messages AFTER this time get AI replies
 let connectionTimestamp = null;
+
+// Reconnection control
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 10;
+const BASE_RECONNECT_DELAY = 5000; // 5 seconds base delay
 
 // Helper: Format phone number correctly
 function formatPhoneNumber(phone) {
@@ -86,10 +90,15 @@ async function connectToWhatsApp() {
         const { version, isLatest } = await fetchLatestBaileysVersion();
         console.log(`Using WA v${version.join('.')}, isLatest: ${isLatest}`);
         
+        // Ensure auth folder exists
+        if (!fs.existsSync(AUTH_FOLDER)) {
+            fs.mkdirSync(AUTH_FOLDER, { recursive: true });
+        }
+        
         // Load auth state
         const { state, saveCreds } = await useMultiFileAuthState(AUTH_FOLDER);
         
-        // Create socket
+        // Create socket with STABLE settings
         sock = makeWASocket({
             version,
             auth: state,
@@ -98,12 +107,13 @@ async function connectToWhatsApp() {
             browser: ['Sales Brain', 'Chrome', '120.0.0'],
             connectTimeoutMs: 60000,
             defaultQueryTimeoutMs: 0,
-            keepAliveIntervalMs: 30000,
-            emitOwnEvents: true,
-            fireInitQueries: true,
+            keepAliveIntervalMs: 25000, // Keep alive every 25 seconds
+            emitOwnEvents: false, // Don't emit own events to avoid loops
+            fireInitQueries: false, // Don't fire init queries - causes rate limits
             generateHighQualityLinkPreview: false,
-            syncFullHistory: false,
-            markOnlineOnConnect: true
+            syncFullHistory: false, // CRITICAL: Don't sync history
+            markOnlineOnConnect: false, // Don't mark online - reduces API calls
+            retryRequestDelayMs: 2000 // Delay between retries
         });
         
         // Handle connection updates
@@ -133,21 +143,31 @@ async function connectToWhatsApp() {
                 currentQR = null;
                 connectionStatus = 'disconnected';
                 
-                if (shouldReconnect) {
-                    console.log('Reconnecting in 3 seconds...');
-                    setTimeout(connectToWhatsApp, 3000);
-                } else {
+                if (shouldReconnect && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                    reconnectAttempts++;
+                    // Exponential backoff: 5s, 10s, 20s, 40s... up to 60s max
+                    const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts - 1), 60000);
+                    console.log(`Reconnecting in ${delay/1000} seconds... (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+                    setTimeout(connectToWhatsApp, delay);
+                } else if (!shouldReconnect) {
                     // Clear auth if logged out
+                    console.log('Logged out - clearing auth');
                     if (fs.existsSync(AUTH_FOLDER)) {
                         fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
-                        console.log('Auth cleared due to logout');
                     }
+                    reconnectAttempts = 0;
+                    // Start fresh connection
+                    setTimeout(connectToWhatsApp, 3000);
+                } else {
+                    console.log('Max reconnect attempts reached. Please restart manually.');
+                    connectionStatus = 'error';
                 }
             } else if (connection === 'open') {
                 console.log('WhatsApp connection opened!');
                 isReady = true;
                 currentQR = null;
                 connectionStatus = 'connected';
+                reconnectAttempts = 0; // Reset on successful connection
                 
                 // CRITICAL: Set connection timestamp - only messages AFTER this get AI replies
                 connectionTimestamp = Math.floor(Date.now() / 1000);
@@ -161,35 +181,40 @@ async function connectToWhatsApp() {
                     console.log('Connected as:', connectedPhone);
                 }
                 
-                // Notify backend of connection with timestamp
-                try {
-                    await axios.post(`${BACKEND_URL}/api/whatsapp/connected`, {
-                        phone: connectedPhone,
-                        connectionTimestamp: connectionTimestamp
-                    });
+                // Notify backend of connection with timestamp (non-blocking)
+                axios.post(`${BACKEND_URL}/api/whatsapp/connected`, {
+                    phone: connectedPhone,
+                    connectionTimestamp: connectionTimestamp
+                }).then(() => {
                     console.log('Backend notified of connection');
-                } catch (err) {
+                }).catch((err) => {
                     console.error('Failed to notify backend:', err.message);
-                }
+                });
                 
-                // Start syncing messages (read-only historical data)
-                syncMessages();
+                // NO syncMessages() call - let messages come in real-time
+                console.log('Ready to receive messages in real-time');
             }
         });
         
-        // Save credentials
-        sock.ev.on('creds.update', saveCreds);
+        // Save credentials when updated
+        sock.ev.on('creds.update', async () => {
+            console.log('Credentials updated, saving...');
+            await saveCreds();
+        });
         
         // Handle incoming messages
         sock.ev.on('messages.upsert', async ({ messages, type }) => {
+            // Only handle notify type (real-time messages)
             if (type !== 'notify') return;
             
             for (const msg of messages) {
                 // Skip own messages and status updates
-                if (msg.key.fromMe || msg.key.remoteJid === 'status@broadcast') continue;
+                if (msg.key.fromMe) continue;
+                if (msg.key.remoteJid === 'status@broadcast') continue;
+                if (msg.key.remoteJid?.endsWith('@g.us')) continue; // Skip group messages
                 
                 // Format phone number correctly
-                const rawPhone = msg.key.remoteJid.replace('@s.whatsapp.net', '').replace('@g.us', '');
+                const rawPhone = msg.key.remoteJid.replace('@s.whatsapp.net', '');
                 const phone = formatPhoneNumber(rawPhone);
                 
                 const content = msg.message?.conversation || 
@@ -203,9 +228,9 @@ async function connectToWhatsApp() {
                 // CRITICAL: Check if this is a historical message (before connection)
                 const isHistorical = connectionTimestamp && msgTimestamp < connectionTimestamp;
                 
-                console.log(`Incoming message from: ${phone} - ${content.substring(0, 50)}`);
-                console.log(`  Message timestamp: ${msgTimestamp}, Connection timestamp: ${connectionTimestamp}`);
-                console.log(`  Is historical (read-only): ${isHistorical}`);
+                console.log(`[MESSAGE] From: ${phone}`);
+                console.log(`  Content: ${content.substring(0, 50)}...`);
+                console.log(`  Timestamp: ${msgTimestamp}, Connection: ${connectionTimestamp}, Historical: ${isHistorical}`);
                 
                 // Forward to backend with historical flag
                 try {
@@ -215,13 +240,13 @@ async function connectToWhatsApp() {
                         timestamp: msgTimestamp,
                         messageId: msg.key.id,
                         hasMedia: !!(msg.message?.imageMessage || msg.message?.videoMessage || msg.message?.audioMessage),
-                        isHistorical: isHistorical  // Backend will NOT auto-reply if true
-                    });
-                    console.log('Message forwarded to backend:', response.data?.mode || 'normal');
+                        isHistorical: isHistorical
+                    }, { timeout: 30000 });
+                    console.log(`  Backend response: ${response.data?.mode || 'normal'}`);
                 } catch (err) {
-                    console.error('Failed to forward message:', err.message);
+                    console.error(`  Failed to forward: ${err.message}`);
                     if (err.response) {
-                        console.error('Backend error:', err.response.data);
+                        console.error(`  Backend error: ${JSON.stringify(err.response.data)}`);
                     }
                 }
             }
@@ -230,38 +255,14 @@ async function connectToWhatsApp() {
     } catch (error) {
         console.error('Connection error:', error.message);
         connectionStatus = 'error';
-        // Retry after 5 seconds
-        setTimeout(connectToWhatsApp, 5000);
-    }
-}
-
-// Sync existing messages (slowly to avoid rate limits)
-async function syncMessages() {
-    if (!sock || !isReady) return;
-    
-    try {
-        syncProgress = { total: 0, synced: 0, status: 'syncing' };
-        console.log('Starting message sync...');
         
-        // Get all chats
-        const chats = await sock.groupFetchAllParticipating();
-        const chatIds = Object.keys(chats || {});
-        
-        // Also include recent direct chats from store
-        // Note: Baileys doesn't store chat history like whatsapp-web.js
-        // We'll sync on message receipt instead
-        
-        console.log(`Found ${chatIds.length} group chats`);
-        syncProgress.total = chatIds.length;
-        
-        // For now, mark sync as complete
-        // Real-time messages will be handled by messages.upsert event
-        syncProgress.status = 'complete';
-        console.log('Sync setup complete - messages will sync in real-time');
-        
-    } catch (error) {
-        console.error('Sync error:', error.message);
-        syncProgress.status = 'error';
+        // Retry with exponential backoff
+        if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+            reconnectAttempts++;
+            const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts - 1), 60000);
+            console.log(`Retrying connection in ${delay/1000} seconds...`);
+            setTimeout(connectToWhatsApp, delay);
+        }
     }
 }
 
@@ -276,22 +277,22 @@ async function sendMessage(phone, message) {
     const cleanPhone = formatPhoneNumber(phone);
     const jid = cleanPhone + '@s.whatsapp.net';
     
-    console.log(`Sending message to: ${cleanPhone} (JID: ${jid})`);
-    console.log(`Message preview: ${message.substring(0, 100)}...`);
+    console.log(`[SEND] To: ${cleanPhone}`);
+    console.log(`  Message: ${message.substring(0, 50)}...`);
     
     try {
         const result = await sock.sendMessage(jid, { text: message });
-        console.log('Message sent successfully. ID:', result?.key?.id);
+        console.log(`  Sent successfully. ID: ${result?.key?.id}`);
         return true;
     } catch (err) {
-        console.error('Send message error:', err.message);
+        console.error(`  Send error: ${err.message}`);
         throw err;
     }
 }
 
 // API Routes
 app.get('/health', (req, res) => {
-    res.json({ status: 'ok', library: 'baileys' });
+    res.json({ status: 'ok', library: 'baileys', connected: isReady });
 });
 
 app.get('/status', (req, res) => {
@@ -299,10 +300,9 @@ app.get('/status', (req, res) => {
         connected: isReady,
         phone: connectedPhone,
         qrCode: currentQR,
-        syncProgress: syncProgress,
         connectionStatus: connectionStatus,
-        connectionTimestamp: connectionTimestamp,  // When session started
-        previewMode: false,
+        connectionTimestamp: connectionTimestamp,
+        reconnectAttempts: reconnectAttempts,
         library: 'baileys'
     });
 });
@@ -320,7 +320,7 @@ app.get('/qr', (req, res) => {
 app.post('/send', async (req, res) => {
     try {
         const { phone, message } = req.body;
-        console.log('Send API called. Phone:', phone, 'Message length:', message?.length);
+        console.log('[API] Send request. Phone:', phone);
         
         if (!phone || !message) {
             return res.status(400).json({ error: 'Phone and message are required' });
@@ -329,13 +329,14 @@ app.post('/send', async (req, res) => {
         await sendMessage(phone, message);
         res.json({ success: true });
     } catch (error) {
-        console.error('Send API error:', error.message);
+        console.error('[API] Send error:', error.message);
         res.status(500).json({ error: error.message, connected: isReady });
     }
 });
 
 app.post('/disconnect', async (req, res) => {
     try {
+        console.log('[API] Disconnect requested');
         if (sock) {
             await sock.logout();
         }
@@ -343,6 +344,7 @@ app.post('/disconnect', async (req, res) => {
         connectedPhone = null;
         currentQR = null;
         connectionStatus = 'disconnected';
+        reconnectAttempts = 0;
         
         // Clear auth
         if (fs.existsSync(AUTH_FOLDER)) {
@@ -357,17 +359,22 @@ app.post('/disconnect', async (req, res) => {
 
 app.post('/reconnect', async (req, res) => {
     try {
-        console.log('Reconnect requested...');
+        console.log('[API] Reconnect requested');
         
-        // Close existing connection
+        // Close existing connection gracefully
         if (sock) {
-            sock.end();
+            try {
+                sock.end();
+            } catch (e) {
+                // Ignore errors on close
+            }
         }
         
         isReady = false;
         connectedPhone = null;
         currentQR = null;
-        connectionTimestamp = null;  // Reset connection timestamp
+        connectionTimestamp = null;
+        reconnectAttempts = 0;
         
         // Clear old auth and start fresh
         if (fs.existsSync(AUTH_FOLDER)) {
@@ -375,12 +382,12 @@ app.post('/reconnect', async (req, res) => {
             console.log('Auth folder cleared');
         }
         
-        // Reconnect
-        await connectToWhatsApp();
+        // Wait a moment before reconnecting
+        setTimeout(connectToWhatsApp, 2000);
         
         res.json({ success: true, message: 'Reconnecting...' });
     } catch (error) {
-        console.error('Reconnect error:', error.message);
+        console.error('[API] Reconnect error:', error.message);
         res.status(500).json({ error: error.message });
     }
 });
