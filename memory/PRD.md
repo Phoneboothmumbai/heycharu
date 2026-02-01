@@ -27,19 +27,14 @@ Sales Brain is a SaaS platform that acts as a central brain for customer intelli
 - ✅ Conversations & Topics management
 - ✅ AI Chat integration (OpenAI GPT-5.2 via Emergent LLM Key)
 - ✅ Orders with automatic ticket creation
-- ✅ WhatsApp integration endpoints (simulation mode for preview)
+- ✅ **WhatsApp integration (LIVE using Baileys library)**
 - ✅ Dashboard statistics
 - ✅ Settings management
 - ✅ Seed data for demo
-- ✅ **Knowledge Base API** (FAQs, Policies, Procedures)
-- ✅ **Escalation System** (automatic escalation on authority-boundary triggers)
-- ✅ **Conversation Summaries API** (structured summaries generation)
-- ✅ **Enhanced AI with Rules**:
-  - Context-First Rule (loads customer profile before responding)
-  - No Assumptions Rule (asks clarifying questions)
-  - No Repetition Rule (uses stored data)
-  - Authority Boundary Rule (escalates discount/delivery requests)
-  - Professional tone enforcement
+- ✅ Knowledge Base API (FAQs, Policies, Procedures)
+- ✅ Escalation System (automatic escalation on authority-boundary triggers)
+- ✅ Conversation Summaries API (structured summaries generation)
+- ✅ Enhanced AI with Rules
 
 ### Frontend (React + Tailwind + Shadcn UI)
 - ✅ Login/Register pages with light/dark theme
@@ -48,35 +43,31 @@ Sales Brain is a SaaS platform that acts as a central brain for customer intelli
 - ✅ Conversations page with chat interface
 - ✅ Products catalog page
 - ✅ Orders & Tickets page (osTicket MOCKED)
-- ✅ WhatsApp connection page (QR code with simulation)
+- ✅ **WhatsApp connection page with LIVE QR code**
 - ✅ Settings page
 - ✅ Theme toggle (Neural Slate palette)
 
-### WhatsApp Service (Node.js)
+### WhatsApp Service (Node.js + Baileys) - **LIVE!**
 - ✅ Express server running on port 3001
-- ✅ Preview mode with mock QR code generation
-- ✅ Status, connect, disconnect endpoints
-- ✅ Message simulation support
-- ⚠️ Real WhatsApp (via whatsapp-web.js) requires Chromium - only works in production
+- ✅ **Baileys library - NO Chromium required!**
+- ✅ **Real QR code generation - scan with your phone**
+- ✅ Real-time message receiving
+- ✅ Message sending capability
+- ✅ Session persistence (auth stored in auth_info_baileys)
+- ✅ Auto-reconnection on disconnect
+- ✅ Message forwarding to backend
 
 ### Integrations
 - ✅ OpenAI GPT-5.2 (via Emergent LLM key) - WORKING
-- ⚠️ WhatsApp (PREVIEW MODE - QR scan simulation in preview environment)
+- ✅ **WhatsApp (LIVE - using Baileys, no Chromium needed)**
 - ⚠️ osTicket (MOCKED - tickets stored locally)
 - ⚠️ Payment Gateway (MOCKED)
-
-## Fixed Issues (February 2026)
-1. ✅ Removed duplicate `simulate-message` endpoint in server.py
-2. ✅ Fixed dead code in WhatsApp routes
-3. ✅ Created WhatsApp service with preview mode support
-4. ✅ Added supervisor configuration for WhatsApp service
-5. ✅ Backend passes `previewMode` flag to frontend
 
 ## Technical Architecture
 ```
 /app/
 ├── backend/
-│   ├── server.py         # Main FastAPI app (1400+ lines)
+│   ├── server.py         # Main FastAPI app
 │   ├── tests/            # API tests
 │   └── .env
 ├── frontend/
@@ -88,8 +79,9 @@ Sales Brain is a SaaS platform that acts as a central brain for customer intelli
 │   │   └── pages/        # React pages
 │   ├── package.json
 │   └── .env
-├── whatsapp-service/     # Node.js WhatsApp service
-│   ├── index.js          # Preview mode implementation
+├── whatsapp-service/     # Node.js WhatsApp service (Baileys)
+│   ├── index.js          # LIVE WhatsApp implementation
+│   ├── auth_info_baileys/ # Session storage
 │   └── package.json
 └── memory/
     └── PRD.md
@@ -100,27 +92,34 @@ Sales Brain is a SaaS platform that acts as a central brain for customer intelli
 - `/api/dashboard/stats`
 - `/api/ai/chat`
 - `/api/kb`, `/api/escalations`, `/api/summaries`
-- `/api/whatsapp/{status, qr, simulate-message, send, disconnect, reconnect}`
+- `/api/whatsapp/{status, qr, send, disconnect, reconnect, incoming, sync-messages}`
 - `/api/customers`, `/api/products`, `/api/orders`, `/api/tickets`
 
 ## Test Credentials
 - Email: demo@test.com
 - Password: demo123
 
+## WhatsApp Setup Instructions
+1. Navigate to WhatsApp page in the app
+2. A REAL QR code will be displayed
+3. Open WhatsApp on your phone → Settings → Linked Devices → Link a Device
+4. Scan the QR code
+5. WhatsApp is now connected! Messages will flow automatically
+
 ## Prioritized Backlog
 
-### P0 - Critical (for Production)
-- [ ] Deploy to production for real WhatsApp Web.js integration (requires Chromium)
+### P0 - Critical
+- [x] ~~Real WhatsApp integration~~ **DONE with Baileys!**
 - [ ] Real osTicket API integration
 - [ ] Multi-topic conversation parsing
 
 ### P1 - High Priority
+- [ ] Historical message sync on WhatsApp connect
 - [ ] Customer purchase history tracking
 - [ ] Device ownership management
 - [ ] Payment gateway integration (Stripe/Razorpay)
 - [ ] Follow-up automation
 - [ ] Reseller/Referral module
-- [ ] Historical message sync on WhatsApp connect
 
 ### P2 - Medium Priority
 - [ ] Voice note transcription
@@ -135,13 +134,21 @@ Sales Brain is a SaaS platform that acts as a central brain for customer intelli
 - [ ] Audit logs
 - [ ] Multi-language support
 
-## Known Limitations in Preview
-1. **WhatsApp Web.js** - Requires Chromium browser which cannot run in the K8s preview environment. Works in production deployment.
-2. **osTicket** - Integration is mocked, tickets are stored in MongoDB instead of osTicket.
-3. **Payment Gateway** - Mocked, payment status must be updated manually.
+## Known Limitations
+1. **osTicket** - Integration is mocked, tickets are stored in MongoDB instead of osTicket.
+2. **Payment Gateway** - Mocked, payment status must be updated manually.
 
-## Next Steps
-1. Deploy to production environment for real WhatsApp functionality
-2. Connect osTicket API
-3. Add multi-topic parsing logic
-4. Implement escalation notifications to Charu's phone
+## Changelog
+
+### February 1, 2026
+- Replaced whatsapp-web.js with Baileys library
+- WhatsApp now works WITHOUT Chromium browser
+- Real QR code generation and scanning
+- Real-time message receiving and sending
+- Auto-reconnection support
+
+### January 2026
+- Initial MVP with FastAPI + React
+- AI Chat integration with GPT-5.2
+- Customer, Product, Order management
+- Knowledge Base and Escalations
