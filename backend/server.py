@@ -330,6 +330,34 @@ class LeadInjectionResponse(BaseModel):
     created_at: str
     created_by: str
 
+# Auto-Messaging Models
+class AutoMessageTemplate(BaseModel):
+    trigger_type: str  # no_response, order_confirmed, payment_received, ticket_created, ticket_resolved, ai_uncertain
+    message_template: str
+    is_enabled: bool = True
+    delay_hours: int = 0  # Delay before sending (for follow-ups)
+
+class AutoMessageSettings(BaseModel):
+    max_messages_per_topic: int = 3
+    cooldown_hours: int = 24  # Min hours between auto-messages to same customer
+    dnd_start_hour: int = 21  # 9 PM
+    dnd_end_hour: int = 9     # 9 AM
+    no_response_days: int = 2  # Days before no-response follow-up
+    auto_messaging_enabled: bool = True
+
+class ScheduledMessage(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    customer_id: str
+    customer_phone: str
+    conversation_id: str
+    topic_id: Optional[str]
+    trigger_type: str
+    message: str
+    scheduled_for: str
+    status: str  # pending, sent, cancelled
+    created_at: str
+
 # ============== AUTH HELPERS ==============
 
 
