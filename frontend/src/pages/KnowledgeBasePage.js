@@ -38,11 +38,12 @@ const KnowledgeBasePage = () => {
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef(null);
 
+  const getToken = () => localStorage.getItem('sales-brain-token');
+
   const fetchArticles = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token');
       const res = await axios.get(`${API_URL}/api/kb`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${getToken()}` }
       });
       setArticles(res.data);
     } catch (e) {
