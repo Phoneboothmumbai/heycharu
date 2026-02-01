@@ -545,8 +545,12 @@ def parse_lead_injection_command(message: str) -> Optional[Dict]:
     - "Lead: Priya - 8765432109 - wants MacBook Air"
     - "Foram 9969528677 wants to buy a iPhone"
     - "Rahul 9876543210 interested in MacBook"
+    - Multi-line: "lead inject\nForam wants to buy iPhone 15\nForam 9969528677"
     """
     import re
+    
+    # Normalize message - join multiple lines, remove extra spaces
+    normalized = ' '.join(message.strip().split())
     
     # Pattern 1: "Customer name XXX, number XXX is asking for YYY"
     pattern1 = r"(?:customer\s+)?name\s+([^,]+),?\s*(?:number|phone|mobile)?\s*[:\s]*([0-9+\s-]{10,15}).*?(?:asking|wants?|interested|looking)\s+(?:for\s+)?(.+)"
@@ -557,23 +561,50 @@ def parse_lead_injection_command(message: str) -> Optional[Dict]:
     # Pattern 3: "inject Name Number Product"
     pattern3 = r"inject\s+([^0-9]+)\s+([0-9+\s-]{10,15})\s+(.+)"
     
-    # Pattern 4: Simple "Name Number wants/interested/looking Product" (NEW)
-    pattern4 = r"^([A-Za-z]+(?:\s+[A-Za-z]+)?)\s+([0-9]{10,12})\s+(?:wants?\s+(?:to\s+)?(?:buy\s+)?|interested\s+(?:in\s+)?|looking\s+(?:for\s+)?)(.+)$"
+    # Pattern 4: "Name Number wants/interested/looking Product"
+    pattern4 = r"([A-Za-z]+(?:\s+[A-Za-z]+)?)\s+([0-9]{10,12})\s+(?:wants?\s+(?:to\s+)?(?:buy\s+)?|interested\s+(?:in\s+)?|looking\s+(?:for\s+)?)(.+)"
     
-    # Pattern 5: "Name Number Product" - very simple (NEW)
-    pattern5 = r"^([A-Za-z]+(?:\s+[A-Za-z]+)?)\s+([0-9]{10,12})\s+(?:for\s+)?([A-Za-z].+)$"
+    # Pattern 5: "Name wants Product Name Number" (split format)
+    pattern5 = r"([A-Za-z]+)\s+(?:wants?\s+(?:to\s+)?(?:buy\s+)?|interested\s+(?:in\s+)?|looking\s+(?:for\s+)?)([^0-9]+)\s+\1\s+([0-9]{10,12})"
     
-    for pattern in [pattern1, pattern2, pattern3, pattern4, pattern5]:
-        match = re.search(pattern, message.strip(), re.IGNORECASE)
+    # Pattern 6: "lead inject Name wants Product Name Number" (exact format from screenshot)
+    pattern6 = r"lead\s+inject\s+([A-Za-z]+)\s+(?:wants?\s+(?:to\s+)?(?:buy\s+)?)(.+?)\s+\1\s+([0-9]{10,12})"
+    
+    # Pattern 7: Extract Name and Number separately from message containing both
+    pattern7 = r"([A-Za-z]+)\s+([0-9]{10,12})"
+    
+    for pattern in [pattern1, pattern2, pattern3, pattern4, pattern6, pattern5]:
+        match = re.search(pattern, normalized, re.IGNORECASE)
         if match:
-            product = match.group(3).strip()
+            if pattern == pattern5 or pattern == pattern6:
+                # Name is in group 1, product in group 2, phone in group 3
+                product = match.group(2).strip()
+                phone = match.group(3).strip()
+            else:
+                product = match.group(3).strip()
+                phone = match.group(2).strip()
+            
             # Clean up product text - remove "a " or "an " prefix
             product = re.sub(r'^(a|an)\s+', '', product, flags=re.IGNORECASE)
             return {
                 "customer_name": match.group(1).strip(),
-                "phone": match.group(2).strip().replace(" ", "").replace("-", ""),
+                "phone": phone.replace(" ", "").replace("-", ""),
                 "product_interest": product
             }
+    
+    # Fallback: Try to extract name, phone and product keywords from message
+    phone_match = re.search(r'([0-9]{10,12})', normalized)
+    name_match = re.search(r'^(?:lead\s+inject\s+)?([A-Za-z]+)', normalized, re.IGNORECASE)
+    product_keywords = re.search(r'(?:wants?\s+(?:to\s+)?(?:buy\s+)?|interested\s+(?:in\s+)?|looking\s+(?:for\s+)?|for\s+)(.+?)(?:\s+[A-Za-z]+\s+[0-9]|$)', normalized, re.IGNORECASE)
+    
+    if phone_match and name_match and product_keywords:
+        product = product_keywords.group(1).strip()
+        product = re.sub(r'^(a|an)\s+', '', product, flags=re.IGNORECASE)
+        return {
+            "customer_name": name_match.group(1).strip(),
+            "phone": phone_match.group(1).strip(),
+            "product_interest": product
+        }
     
     return None
 
