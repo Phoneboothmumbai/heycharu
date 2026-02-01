@@ -643,6 +643,11 @@ Your reply (be helpful, natural, and follow ALL rules above):"""
         user_msg = UserMessage(text=message)
         response = await chat.send_message(user_msg)
         
+        # Check if response is empty
+        if not response or len(response.strip()) == 0:
+            logger.warning(f"AI returned empty response for message: {message[:50]}")
+            return "Let me check on that and get back to you shortly."
+        
         # Update topic if exists
         if active_topic:
             await db.topics.update_one(
@@ -657,7 +662,8 @@ Your reply (be helpful, natural, and follow ALL rules above):"""
         
     except Exception as e:
         logger.error(f"AI reply error: {e}")
-        return None
+        # Return a fallback message instead of None
+        return "I'm having trouble processing that. Let me check and get back to you."
 
 async def send_whatsapp_message(phone: str, message: str) -> bool:
     """Send a WhatsApp message via the WhatsApp service"""
