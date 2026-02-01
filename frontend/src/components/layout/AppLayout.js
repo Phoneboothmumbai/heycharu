@@ -5,7 +5,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { Button } from "../ui/button";
 import { Avatar, AvatarFallback } from "../ui/avatar";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
-import { LayoutDashboard, Users, MessageSquare, Package, ShoppingCart, Settings, Sun, Moon, LogOut, Menu, X, Brain, Smartphone, BookOpen, AlertTriangle } from "lucide-react";
+import { LayoutDashboard, Users, MessageSquare, Package, ShoppingCart, Settings, Sun, Moon, LogOut, Menu, X, Brain, Smartphone } from "lucide-react";
 
 var navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
@@ -14,8 +14,6 @@ var navItems = [
   { icon: Package, label: "Products", path: "/products" },
   { icon: ShoppingCart, label: "Orders", path: "/orders" },
   { icon: Smartphone, label: "WhatsApp", path: "/whatsapp" },
-  { icon: BookOpen, label: "Knowledge Base", path: "/knowledge-base" },
-  { icon: AlertTriangle, label: "Escalations", path: "/escalations" },
   { icon: Settings, label: "Settings", path: "/settings" },
 ];
 
@@ -62,7 +60,7 @@ function AppLayout(props) {
             {navItems.map(function(item) {
               var Icon = item.icon;
               return (
-                <Link key={item.path} to={item.path} onClick={closeSidebar} className={"sidebar-link " + (isActive(item.path) ? "active" : "")} data-testid={"nav-" + item.label.toLowerCase().replace(/\s/g, '-')}>
+                <Link key={item.path} to={item.path} onClick={closeSidebar} className={"sidebar-link " + (isActive(item.path) ? "active" : "")} data-testid={"nav-" + item.label.toLowerCase()}>
                   <Icon className="w-5 h-5" />
                   <span>{item.label}</span>
                 </Link>
@@ -105,7 +103,7 @@ function AppLayout(props) {
           <Button variant="ghost" size="icon" className="lg:hidden mr-2" onClick={openSidebar} data-testid="mobile-menu-btn">
             <Menu className="w-5 h-5" />
           </Button>
-          <h1 className="text-lg font-semibold capitalize">{location.pathname === "/" ? "Dashboard" : location.pathname.slice(1).replace(/-/g, ' ')}</h1>
+          <h1 className="text-lg font-semibold capitalize">{location.pathname === "/" ? "Dashboard" : location.pathname.slice(1)}</h1>
           <div className="ml-auto">
             <Button variant="ghost" size="icon" onClick={toggleTheme} className="hidden lg:flex" data-testid="header-theme-toggle">
               {theme === "light" ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
