@@ -85,16 +85,6 @@ function WhatsAppPage() {
         <p className="text-muted-foreground">Scan QR to connect your WhatsApp</p>
       </div>
 
-      {isPreviewMode && (
-        <Alert className="border-amber-500/50 bg-amber-500/10">
-          <AlertTitle className="text-amber-600 dark:text-amber-400">Preview Mode</AlertTitle>
-          <AlertDescription className="text-amber-700 dark:text-amber-300">
-            Live WhatsApp requires Chrome browser which is not available in the preview environment. 
-            Use the <strong>Message Simulation</strong> below to test the flow. Deploy to production for real WhatsApp.
-          </AlertDescription>
-        </Alert>
-      )}
-
       <Card className="border-border/50">
         <CardHeader>
           <div className="flex items-center justify-between">
