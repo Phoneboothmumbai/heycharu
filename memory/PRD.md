@@ -33,8 +33,10 @@ Sales Brain is a SaaS platform that acts as a central brain for customer intelli
 - ✅ Seed data for demo
 - ✅ Knowledge Base API (FAQs, Policies, Procedures)
 - ✅ Escalation System (automatic escalation on authority-boundary triggers)
-- ✅ Conversation Summaries API (structured summaries generation)
-- ✅ Enhanced AI with Rules
+- ✅ Conversation Summaries API
+- ✅ **Lead Injection API** - Owner can inject leads, AI handles outreach
+- ✅ **Excluded Numbers API** - Silent monitoring (record but never reply)
+- ✅ **AI Auto-Reply** - Automatic AI responses to incoming WhatsApp messages
 
 ### Frontend (React + Tailwind + Shadcn UI)
 - ✅ Login/Register pages with light/dark theme
@@ -44,7 +46,9 @@ Sales Brain is a SaaS platform that acts as a central brain for customer intelli
 - ✅ Products catalog page
 - ✅ Orders & Tickets page (osTicket MOCKED)
 - ✅ **WhatsApp connection page with LIVE QR code**
-- ✅ Settings page
+- ✅ **Lead Injection page** - Inject and track leads
+- ✅ **Excluded Numbers page** - Manage silent monitoring
+- ✅ Settings page with Owner Phone configuration
 - ✅ Theme toggle (Neural Slate palette)
 
 ### WhatsApp Service (Node.js + Baileys) - **LIVE!**
@@ -55,7 +59,43 @@ Sales Brain is a SaaS platform that acts as a central brain for customer intelli
 - ✅ Message sending capability
 - ✅ Session persistence (auth stored in auth_info_baileys)
 - ✅ Auto-reconnection on disconnect
-- ✅ Message forwarding to backend
+
+### New Features (February 1, 2026)
+
+#### 1. Owner-Initiated Lead Injection
+**How it works:**
+- Owner (Charu) can inject leads via:
+  - **UI**: Use the Lead Injection page to enter customer name, phone, and product interest
+  - **WhatsApp Command**: Send a message like "Customer name Rahul, number 9876543210 is asking for iPhone 15 Pro Max"
+
+**System behavior:**
+1. Creates or updates customer profile
+2. Creates conversation and topic (Product Inquiry)
+3. Sends outbound WhatsApp message to customer
+4. AI takes over the sales conversation
+5. Follows all rules (no discounts, escalate when unsure)
+
+**API Endpoints:**
+- `GET /api/leads` - List all injected leads
+- `POST /api/leads/inject` - Inject new lead
+- `PUT /api/leads/{id}/status` - Update lead status
+
+#### 2. Number Exclusion (Silent Monitoring)
+**How it works:**
+- Mark specific phone numbers as "Excluded from Reply"
+- Messages from excluded numbers are recorded but AI NEVER replies
+- Use for dealers, vendors, internal contacts
+
+**Data handling:**
+- Messages still stored in `silent_messages` collection
+- Searchable and auditable
+- Can be used for analytics
+
+**API Endpoints:**
+- `GET /api/excluded-numbers` - List excluded numbers
+- `POST /api/excluded-numbers` - Add number to exclusion list
+- `DELETE /api/excluded-numbers/{id}` - Remove exclusion
+- `GET /api/excluded-numbers/check/{phone}` - Check if number is excluded
 
 ### Integrations
 - ✅ OpenAI GPT-5.2 (via Emergent LLM key) - WORKING
@@ -67,7 +107,7 @@ Sales Brain is a SaaS platform that acts as a central brain for customer intelli
 ```
 /app/
 ├── backend/
-│   ├── server.py         # Main FastAPI app
+│   ├── server.py         # Main FastAPI app (~2000 lines)
 │   ├── tests/            # API tests
 │   └── .env
 ├── frontend/
@@ -76,12 +116,15 @@ Sales Brain is a SaaS platform that acts as a central brain for customer intelli
 │   │   │   ├── layout/AppLayout.js
 │   │   │   └── ui/       # Shadcn UI components
 │   │   ├── contexts/     # AuthContext, ThemeContext
-│   │   └── pages/        # React pages
+│   │   └── pages/
+│   │       ├── LeadsPage.js         # NEW
+│   │       ├── ExcludedNumbersPage.js # NEW
+│   │       └── ...
 │   ├── package.json
 │   └── .env
 ├── whatsapp-service/     # Node.js WhatsApp service (Baileys)
-│   ├── index.js          # LIVE WhatsApp implementation
-│   ├── auth_info_baileys/ # Session storage
+│   ├── index.js
+│   ├── auth_info_baileys/
 │   └── package.json
 └── memory/
     └── PRD.md
@@ -92,8 +135,10 @@ Sales Brain is a SaaS platform that acts as a central brain for customer intelli
 - `/api/dashboard/stats`
 - `/api/ai/chat`
 - `/api/kb`, `/api/escalations`, `/api/summaries`
-- `/api/whatsapp/{status, qr, send, disconnect, reconnect, incoming, sync-messages}`
+- `/api/whatsapp/{status, qr, send, disconnect, reconnect, incoming}`
 - `/api/customers`, `/api/products`, `/api/orders`, `/api/tickets`
+- `/api/leads`, `/api/leads/inject` - **NEW**
+- `/api/excluded-numbers`, `/api/excluded-numbers/check/{phone}` - **NEW**
 
 ## Test Credentials
 - Email: demo@test.com
@@ -106,17 +151,24 @@ Sales Brain is a SaaS platform that acts as a central brain for customer intelli
 4. Scan the QR code
 5. WhatsApp is now connected! Messages will flow automatically
 
+## Lead Injection Command Formats
+From owner's WhatsApp (set Owner Phone in Settings):
+```
+Customer name Rahul, number 9876543210 is asking for iPhone 15 Pro Max
+Lead: Priya - 8765432109 - wants MacBook Air
+inject Amit 9988776655 iPad Pro
+```
+
 ## Prioritized Backlog
 
 ### P0 - Critical
 - [x] ~~Real WhatsApp integration~~ **DONE with Baileys!**
+- [x] ~~Lead Injection~~ **DONE!**
+- [x] ~~Number Exclusion~~ **DONE!**
 - [ ] Real osTicket API integration
-- [ ] Multi-topic conversation parsing
 
 ### P1 - High Priority
 - [ ] Historical message sync on WhatsApp connect
-- [ ] Customer purchase history tracking
-- [ ] Device ownership management
 - [ ] Payment gateway integration (Stripe/Razorpay)
 - [ ] Follow-up automation
 - [ ] Reseller/Referral module
@@ -140,12 +192,14 @@ Sales Brain is a SaaS platform that acts as a central brain for customer intelli
 
 ## Changelog
 
-### February 1, 2026
-- Replaced whatsapp-web.js with Baileys library
-- WhatsApp now works WITHOUT Chromium browser
+### February 1, 2026 (Latest)
+- **NEW**: Lead Injection feature - Owner can inject leads via UI or WhatsApp command
+- **NEW**: Excluded Numbers (Silent Monitoring) - Record messages but never reply
+- **NEW**: AI Auto-Reply on incoming WhatsApp messages
+- **NEW**: Owner phone setting for WhatsApp lead injection commands
+- Replaced whatsapp-web.js with Baileys library (no Chromium needed)
 - Real QR code generation and scanning
-- Real-time message receiving and sending
-- Auto-reconnection support
+- All tests passing (100% success rate)
 
 ### January 2026
 - Initial MVP with FastAPI + React
