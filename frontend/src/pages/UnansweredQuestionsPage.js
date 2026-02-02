@@ -58,7 +58,7 @@ const UnansweredQuestionsPage = () => {
 
   const fetchKbArticles = async () => {
     try {
-      const token = localStorage.getItem("auth_token");
+      const token = localStorage.getItem("sales-brain-token");
       const response = await axios.get(`${API_URL}/api/kb`, {
         headers: { Authorization: `Bearer ${token}` }
       });
