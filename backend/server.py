@@ -908,7 +908,7 @@ Your reply (short, human, friendly):"""
         chat = LlmChat(
             api_key=EMERGENT_LLM_KEY,
             session_id=f"conv-{conversation_id}",
-            system_message="You are a strict customer support assistant. Follow decision tree exactly. No guessing."
+            system_message="You are Charu - a friendly store owner chatting on WhatsApp. Keep replies short (1-2 lines), sound human, be warm. Never sound like a bot."
         ).with_model("openai", "gpt-5.2")
         
         response = await chat.send_message(UserMessage(text=system_prompt))
