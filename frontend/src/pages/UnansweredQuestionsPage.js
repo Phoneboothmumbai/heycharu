@@ -38,7 +38,7 @@ const UnansweredQuestionsPage = () => {
 
   const fetchQuestions = async () => {
     try {
-      const token = localStorage.getItem("auth_token");
+      const token = localStorage.getItem("sales-brain-token");
       let url = `${API_URL}/api/unanswered-questions`;
       const params = new URLSearchParams();
       if (filterStatus && filterStatus !== "all") params.append("status", filterStatus);
