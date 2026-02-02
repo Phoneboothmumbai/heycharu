@@ -233,18 +233,29 @@ const ConversationsPage = () => {
         {selectedConversation ? (
           <>
             <CardHeader className="py-4 px-6 border-b border-border flex-shrink-0">
-              <div className="flex items-center gap-3">
-                <Avatar className="w-10 h-10">
-                  <AvatarFallback className="bg-[#25D366]/10 text-[#25D366]">
-                    {selectedConversation.customer_name?.charAt(0)?.toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <h3 className="font-semibold">{selectedConversation.customer_name}</h3>
-                  <p className="text-sm text-muted-foreground flex items-center gap-1">
-                    <Phone className="w-3 h-3" />
-                    {selectedConversation.customer_phone}
-                  </p>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Avatar className="w-10 h-10">
+                    <AvatarFallback className="bg-[#25D366]/10 text-[#25D366]">
+                      {selectedConversation.customer_name?.charAt(0)?.toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <h3 className="font-semibold">{selectedConversation.customer_name}</h3>
+                    <p className="text-sm text-muted-foreground flex items-center gap-1">
+                      <Phone className="w-3 h-3" />
+                      {selectedConversation.customer_phone}
+                    </p>
+                  </div>
+                </div>
+                {/* Status indicator */}
+                <div className="flex items-center gap-2">
+                  {getStatusBadge(selectedConversation)}
+                  {selectedConversation.escalation_reason && (
+                    <span className="text-xs text-muted-foreground max-w-[200px] truncate" title={selectedConversation.escalation_reason}>
+                      {selectedConversation.escalation_reason}
+                    </span>
+                  )}
                 </div>
               </div>
             </CardHeader>
