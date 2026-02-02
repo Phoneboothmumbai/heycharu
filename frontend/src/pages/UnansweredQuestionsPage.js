@@ -218,7 +218,7 @@ const UnansweredQuestionsPage = () => {
               <SelectItem value="pending_owner_reply">Pending</SelectItem>
               <SelectItem value="resolved">Resolved</SelectItem>
               <SelectItem value="marked_irrelevant">Irrelevant</SelectItem>
-              <SelectItem value="">All</SelectItem>
+              <SelectItem value="all">All</SelectItem>
             </SelectContent>
           </Select>
         </div>
