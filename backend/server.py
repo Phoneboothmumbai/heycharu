@@ -623,7 +623,7 @@ async def get_excluded_number_info(phone: str) -> Optional[Dict]:
 # ============== OWNER COMMAND PARSING ==============
 
 def parse_lead_injection_command(message: str) -> Optional[Dict]:
-    """Parse owner's lead injection command - FLEXIBLE FORMAT PARSER
+    """Parse owner lead injection command - FLEXIBLE FORMAT PARSER
     
     Supported Formats:
     - "lead inject iPhone 17 Foram 9969528677"
@@ -3484,7 +3484,7 @@ async def handle_incoming_whatsapp(data: WhatsAppIncoming):
                     
                     # Polish the reply using AI
                     try:
-                        polish_prompt = f"""Polish this owner's reply to make it professional and friendly for a customer.
+                        polish_prompt = f"""Polish this owner reply to make it professional and friendly for a customer.
 
 ORIGINAL CUSTOMER QUESTION: "{original_question}"
 
@@ -3504,7 +3504,7 @@ Write the polished reply:"""
                         chat = LlmChat(
                             api_key=EMERGENT_LLM_KEY,
                             session_id=f"polish-{target_escalation['id']}",
-                            system_message="You are a helpful store assistant. Polish the owner's reply to make it professional and friendly."
+                            system_message="You are a helpful store assistant. Polish the owner reply to make it professional and friendly."
                         ).with_model("openai", "gpt-5.2")
                         
                         polished_reply = await chat.send_message(UserMessage(text=polish_prompt))
@@ -3599,7 +3599,7 @@ Write the polished reply:"""
                         
                         # Polish and send (same logic as above)
                         try:
-                            polish_prompt = f"""Polish this owner's reply to make it professional and friendly.
+                            polish_prompt = f"""Polish this owner reply to make it professional and friendly.
 ORIGINAL CUSTOMER QUESTION: "{original_question}"
 OWNER'S RAW REPLY: "{owner_reply}"
 RULES: Keep ALL info same, be friendly, 2-4 sentences, no mention of owner/boss.
@@ -3608,7 +3608,7 @@ Write the polished reply:"""
                             chat = LlmChat(
                                 api_key=EMERGENT_LLM_KEY,
                                 session_id=f"polish-{target_escalation['id']}",
-                                system_message="Polish the owner's reply professionally."
+                                system_message="Polish the owner reply professionally."
                             ).with_model("openai", "gpt-5.2")
                             
                             polished_reply = await chat.send_message(UserMessage(text=polish_prompt))
