@@ -3971,14 +3971,14 @@ async def inject_lead_internal(customer_name: str, phone: str, product_interest:
     )
     
     if product:
-        price = product['base_price']
+        price_str = f"{product['base_price']:,.0f}"
         outbound_msg = f"""{greeting}
 Thanks for reaching out to {store_name}!
 
 I see you are interested in the {product['name']}.
-It is available at Rs {price:,.0f}.
+It is available at Rs {price_str}.
 
-How can I help you today—more details, availability, or anything else?"""
+How can I help you today - more details, availability, or anything else?"""
     elif product_interest and product_interest != "General Inquiry":
         outbound_msg = f"""{greeting}
 Thanks for reaching out to {store_name}!
