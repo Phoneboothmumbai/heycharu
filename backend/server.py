@@ -646,7 +646,7 @@ def parse_lead_injection_command(message: str) -> Optional[Dict]:
     
     phone = phone_match.group(1)
     
-    # Product keywords to identify what's a product vs name
+    # Product keywords to identify what is a product vs name
     product_keywords = ['iphone', 'macbook', 'ipad', 'airpods', 'watch', 'pro', 'max', 'air', 'mini', 'apple', 'samsung', 'pixel', 'galaxy']
     
     customer_name = "Unknown"
@@ -827,7 +827,7 @@ There is already a pending question waiting for owner response:
 - Question: "{pending_escalation.get('customer_message', '')[:100]}"
 - Status: Waiting for owner to respond
 
-If customer asks follow-up about this, acknowledge that you're still waiting for the answer.
+If customer asks follow-up about this, acknowledge that you are still waiting for the answer.
 Do NOT create another escalation for the same topic.
 """
         
@@ -860,11 +860,11 @@ PRODUCT CATALOG:
    → Use EXACT prices from catalog
    → Be professional and concise (2-3 sentences)
 
-3. **If answer NOT FOUND AND it's a product/pricing question**:
+3. **If answer NOT FOUND AND it is a product/pricing question**:
    → Reply ONLY: "ESCALATE_REQUIRED"
    → Do NOT guess prices or availability
 
-4. **If there's a PENDING ESCALATION**:
+4. **If there is a PENDING ESCALATION**:
    → Acknowledge customer is waiting: "I'm still checking on that for you. I will have an answer shortly."
    → Do NOT create duplicate escalation
 
@@ -954,7 +954,7 @@ Your response:""""""
                 logger.info(f"Skipping escalation for simple greeting: {message}")
                 return f"Hi! How can I help you today?"
             
-            # Check if there's already a pending escalation for this customer
+            # Check if there is already a pending escalation for this customer
             if pending_escalation:
                 logger.info(f"Skipping escalation - already pending: {pending_escalation.get('escalation_code')}")
                 return "I'm still checking on your earlier question. I will have an answer for you shortly. Is there anything else I can help with in the meantime?"
@@ -2321,9 +2321,9 @@ async def inject_lead(data: LeadInjectionCreate, user: dict = Depends(get_curren
     )
     
     if product:
-        outbound_msg = f"Hi {customer['name'].split()[0]}! This is from the store. I understand you're interested in the {product['name']}. It's available at Rs.{product['base_price']:,.0f}. Would you like me to share more details about specifications and availability?"
+        outbound_msg = f"Hi {customer['name'].split()[0]}! This is from the store. I understand you are interested in the {product['name']}. It's available at Rs.{product['base_price']:,.0f}. Would you like me to share more details about specifications and availability?"
     else:
-        outbound_msg = f"Hi {customer['name'].split()[0]}! This is from the store. I understand you're interested in {data.product_interest}. I'd be happy to help you with the details. What specifically would you like to know?"
+        outbound_msg = f"Hi {customer['name'].split()[0]}! This is from the store. I understand you are interested in {data.product_interest}. I'd be happy to help you with the details. What specifically would you like to know?"
     
     # Send via WhatsApp
     message_sent = await send_whatsapp_message(phone, outbound_msg)
@@ -3587,7 +3587,7 @@ Write the polished reply:"""
             if pending_escalations and not data.message.lower().startswith(("customer", "lead", "inject")):
                 # There are pending escalations but owner did not specify which one
                 if len(pending_escalations) == 1:
-                    # Only one pending - assume it's for that one (backward compatible)
+                    # Only one pending - assume it is for that one (backward compatible)
                     target_escalation = pending_escalations[0]
                     escalation_code = target_escalation.get("escalation_code", "ESC??")
                     customer_phone = target_escalation.get("customer_phone")
@@ -3759,7 +3759,7 @@ Write the polished reply:"""
             )
         
         # ========== AUTO-CREATE/UPDATE TOPIC BASED ON MESSAGE ==========
-        # Check if there's an active topic for this customer
+        # Check if there is an active topic for this customer
         active_topic = await db.topics.find_one(
             {"customer_id": customer["id"], "status": {"$in": ["open", "in_progress"]}},
             {"_id": 0}
@@ -3974,7 +3974,7 @@ async def inject_lead_internal(customer_name: str, phone: str, product_interest:
         outbound_msg = f"""{greeting}
 Thanks for reaching out to {store_name}!
 
-I see you're interested in the {product['name']}.
+I see you are interested in the {product['name']}.
 It's available at Rs.{product['base_price']:,.0f}.
 
 How can I help you today—more details, availability, or anything else?"""
@@ -3982,7 +3982,7 @@ How can I help you today—more details, availability, or anything else?"""
         outbound_msg = f"""{greeting}
 Thanks for reaching out to {store_name}!
 
-I see you're interested in {product_interest}.
+I see you are interested in {product_interest}.
 How can I help you today—pricing, availability, or something else?"""
     else:
         outbound_msg = f"""{greeting}
