@@ -144,6 +144,7 @@ const UnansweredQuestionsPage = () => {
       toast.success("KB article linked!");
       setShowLinkDialog(false);
       fetchQuestions();
+      fetchStats();
     } catch (error) {
       toast.error("Failed to link KB article");
     }
