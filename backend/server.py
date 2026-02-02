@@ -267,14 +267,41 @@ class KBArticleResponse(BaseModel):
 class EscalationResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str
+    escalation_code: str  # Human-readable code like ESC01, ESC02
     customer_id: str
     customer_name: str
-    conversation_id: str
+    customer_phone: Optional[str] = None
+    conversation_id: Optional[str] = None
     reason: str
     message_content: str
-    status: str  # pending, reviewed, resolved
+    status: str  # pending_owner_reply, owner_replied, resolved, marked_irrelevant
     priority: str
+    sla_deadline: Optional[str] = None
+    sla_reminders_sent: int = 0
+    owner_reply: Optional[str] = None
+    formatted_reply: Optional[str] = None
+    kb_article_id: Optional[str] = None  # Linked KB article if any
+    relevance: str = "relevant"  # relevant, irrelevant
     created_at: str
+    resolved_at: Optional[str] = None
+
+# Unanswered Question Response (for dashboard)
+class UnansweredQuestionResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    escalation_code: str
+    customer_name: str
+    customer_phone: str
+    question: str
+    reason: str
+    status: str
+    relevance: str
+    conversation_count: int = 1
+    created_at: str
+    sla_deadline: Optional[str] = None
+    is_overdue: bool = False
+    linked_kb_id: Optional[str] = None
+    linked_kb_title: Optional[str] = None
 
 # Conversation Summary Model
 class ConversationSummaryResponse(BaseModel):
