@@ -17,7 +17,7 @@ const UnansweredQuestionsPage = () => {
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState("pending_owner_reply");
-  const [filterRelevance, setFilterRelevance] = useState("");
+  const [filterRelevance, setFilterRelevance] = useState("all");
   const [expandedQuestion, setExpandedQuestion] = useState(null);
   
   // Add KB Article Dialog
