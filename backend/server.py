@@ -93,10 +93,14 @@ class CustomerResponse(BaseModel):
     customer_type: str
     addresses: List[Dict[str, Any]] = []
     preferences: Dict[str, Any] = {}
+    payment_preferences: Dict[str, Any] = {}  # Card, UPI, Bank Transfer preferences
     purchase_history: List[Dict[str, Any]] = []
     devices: List[Dict[str, Any]] = []
     tags: List[str] = []
-    notes: str = ""
+    notes: str = ""  # Legacy single note
+    notes_history: List[Dict[str, Any]] = []  # Multiple notes with timestamps
+    invoices: List[Dict[str, Any]] = []  # Uploaded invoice files
+    ai_insights: Dict[str, Any] = {}  # AI-collected data from chats
     total_spent: float = 0.0
     last_interaction: Optional[str] = None
     created_at: str
