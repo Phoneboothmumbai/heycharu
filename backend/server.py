@@ -1865,6 +1865,270 @@ async def get_pending_sla_escalations(user: dict = Depends(get_current_user)):
     
     return result
 
+# ============== UNANSWERED QUESTIONS ROUTES ==============
+
+@api_router.get("/unanswered-questions")
+async def get_unanswered_questions(status: Optional[str] = None, relevance: Optional[str] = None, user: dict = Depends(get_current_user)):
+    """Get all unanswered questions (pending escalations) for the dashboard.
+    
+    Filters:
+    - status: pending_owner_reply, resolved, marked_irrelevant
+    - relevance: relevant, irrelevant
+    """
+    now = datetime.now(timezone.utc)
+    
+    # Build query - default to pending questions
+    query = {}
+    if status:
+        query["status"] = status
+    else:
+        query["status"] = "pending_owner_reply"  # Default: only pending
+    
+    if relevance:
+        query["relevance"] = relevance
+    
+    escalations = await db.escalations.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
+    
+    result = []
+    for esc in escalations:
+        # Calculate if overdue
+        sla_deadline = esc.get("sla_deadline")
+        is_overdue = False
+        if sla_deadline:
+            try:
+                deadline_dt = datetime.fromisoformat(sla_deadline.replace('Z', '+00:00'))
+                is_overdue = now > deadline_dt
+            except:
+                pass
+        
+        # Get linked KB article info if any
+        linked_kb_id = esc.get("kb_article_id")
+        linked_kb_title = None
+        if linked_kb_id:
+            kb_article = await db.kb_articles.find_one({"id": linked_kb_id}, {"_id": 0, "title": 1})
+            if kb_article:
+                linked_kb_title = kb_article.get("title")
+        
+        result.append({
+            "id": esc.get("id"),
+            "escalation_code": esc.get("escalation_code", "ESC??"),
+            "customer_name": esc.get("customer_name", "Unknown"),
+            "customer_phone": esc.get("customer_phone", ""),
+            "question": esc.get("customer_message", ""),
+            "reason": esc.get("reason", "AI couldn't answer"),
+            "status": esc.get("status", "pending_owner_reply"),
+            "relevance": esc.get("relevance", "relevant"),
+            "conversation_count": 1,  # Could be enhanced to count related messages
+            "created_at": esc.get("created_at"),
+            "sla_deadline": sla_deadline,
+            "is_overdue": is_overdue,
+            "linked_kb_id": linked_kb_id,
+            "linked_kb_title": linked_kb_title
+        })
+    
+    return result
+
+@api_router.put("/unanswered-questions/{question_id}/relevance")
+async def mark_question_relevance(question_id: str, relevance: str, user: dict = Depends(get_current_user)):
+    """Mark a question as relevant or irrelevant.
+    
+    Irrelevant questions won't trigger future escalations for similar queries.
+    """
+    if relevance not in ["relevant", "irrelevant"]:
+        raise HTTPException(status_code=400, detail="Invalid relevance value. Use 'relevant' or 'irrelevant'")
+    
+    update_data = {
+        "relevance": relevance,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_by": user["name"]
+    }
+    
+    if relevance == "irrelevant":
+        update_data["status"] = "marked_irrelevant"
+    
+    result = await db.escalations.update_one(
+        {"id": question_id},
+        {"$set": update_data}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Question not found")
+    
+    return {"message": f"Question marked as {relevance}"}
+
+@api_router.post("/unanswered-questions/{question_id}/add-kb-article")
+async def add_kb_article_for_question(question_id: str, title: str, content: str, category: str = "FAQ", tags: List[str] = [], user: dict = Depends(get_current_user)):
+    """Create a new KB article to answer this question.
+    
+    This will:
+    1. Create a new KB article with the provided content
+    2. Link it to this question
+    3. Mark the question as resolved
+    
+    Future similar questions will be answered using this KB article.
+    """
+    # Get the question
+    question = await db.escalations.find_one({"id": question_id}, {"_id": 0})
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+    
+    # Create KB article
+    article_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    
+    article = {
+        "id": article_id,
+        "title": title,
+        "content": content,
+        "category": category,
+        "tags": tags + [question.get("customer_message", "")[:50]],  # Add question text as tag
+        "source": "unanswered_question",
+        "source_question_id": question_id,
+        "created_at": now,
+        "created_by": user["name"],
+        "updated_at": now
+    }
+    
+    await db.kb_articles.insert_one(article)
+    
+    # Link KB article to the question and mark as resolved
+    await db.escalations.update_one(
+        {"id": question_id},
+        {"$set": {
+            "kb_article_id": article_id,
+            "status": "resolved",
+            "resolved_at": now,
+            "resolved_by": user["name"],
+            "resolution_type": "kb_article_created"
+        }}
+    )
+    
+    # Update conversation status if linked
+    if question.get("customer_id"):
+        await db.conversations.update_one(
+            {"customer_id": question["customer_id"]},
+            {"$set": {
+                "status": "active",
+                "escalated_at": None,
+                "escalation_reason": None
+            }}
+        )
+    
+    logger.info(f"KB article created for unanswered question: {article_id}")
+    return {
+        "message": "KB article created and linked",
+        "article_id": article_id,
+        "question_id": question_id
+    }
+
+@api_router.post("/unanswered-questions/{question_id}/link-kb-article/{kb_article_id}")
+async def link_existing_kb_article(question_id: str, kb_article_id: str, user: dict = Depends(get_current_user)):
+    """Link an existing KB article to this question.
+    
+    This marks the question as resolved and ensures future similar questions
+    are answered using the linked KB article.
+    """
+    # Verify the KB article exists
+    kb_article = await db.kb_articles.find_one({"id": kb_article_id}, {"_id": 0})
+    if not kb_article:
+        raise HTTPException(status_code=404, detail="KB article not found")
+    
+    # Get the question
+    question = await db.escalations.find_one({"id": question_id}, {"_id": 0})
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+    
+    now = datetime.now(timezone.utc).isoformat()
+    
+    # Link and resolve
+    await db.escalations.update_one(
+        {"id": question_id},
+        {"$set": {
+            "kb_article_id": kb_article_id,
+            "status": "resolved",
+            "resolved_at": now,
+            "resolved_by": user["name"],
+            "resolution_type": "kb_article_linked"
+        }}
+    )
+    
+    # Update conversation status if linked
+    if question.get("customer_id"):
+        await db.conversations.update_one(
+            {"customer_id": question["customer_id"]},
+            {"$set": {
+                "status": "active",
+                "escalated_at": None,
+                "escalation_reason": None
+            }}
+        )
+    
+    logger.info(f"KB article {kb_article_id} linked to question {question_id}")
+    return {
+        "message": "KB article linked to question",
+        "article_id": kb_article_id,
+        "article_title": kb_article.get("title"),
+        "question_id": question_id
+    }
+
+@api_router.post("/unanswered-questions/{question_id}/link-excel-data")
+async def link_excel_data_to_question(question_id: str, search_query: str, user: dict = Depends(get_current_user)):
+    """Search uploaded Excel/KB data for an answer and link it to this question.
+    
+    This searches through:
+    1. Uploaded Excel files (price lists, etc.)
+    2. Existing KB articles
+    3. Product catalog
+    
+    And suggests or automatically links the best match.
+    """
+    # Get the question
+    question = await db.escalations.find_one({"id": question_id}, {"_id": 0})
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+    
+    customer_message = question.get("customer_message", "")
+    search_term = search_query or customer_message
+    
+    # Search in KB articles
+    kb_results = await db.kb_articles.find(
+        {"$or": [
+            {"title": {"$regex": search_term, "$options": "i"}},
+            {"content": {"$regex": search_term, "$options": "i"}},
+            {"tags": {"$regex": search_term, "$options": "i"}}
+        ]},
+        {"_id": 0}
+    ).limit(5).to_list(5)
+    
+    # Search in products
+    product_results = await db.products.find(
+        {"$or": [
+            {"name": {"$regex": search_term, "$options": "i"}},
+            {"description": {"$regex": search_term, "$options": "i"}},
+            {"sku": {"$regex": search_term, "$options": "i"}}
+        ]},
+        {"_id": 0}
+    ).limit(5).to_list(5)
+    
+    # Search in Excel uploads (stored in kb_uploads collection)
+    excel_results = await db.kb_uploads.find(
+        {"$or": [
+            {"data.name": {"$regex": search_term, "$options": "i"}},
+            {"data.description": {"$regex": search_term, "$options": "i"}},
+            {"data.model": {"$regex": search_term, "$options": "i"}}
+        ]},
+        {"_id": 0}
+    ).limit(5).to_list(5)
+    
+    return {
+        "question_id": question_id,
+        "search_query": search_term,
+        "kb_articles": kb_results,
+        "products": product_results,
+        "excel_data": excel_results,
+        "total_results": len(kb_results) + len(product_results) + len(excel_results)
+    }
+
 # ============== EXCLUDED NUMBERS ROUTES (Silent Monitoring) ==============
 
 @api_router.get("/excluded-numbers", response_model=List[ExcludedNumberResponse])
