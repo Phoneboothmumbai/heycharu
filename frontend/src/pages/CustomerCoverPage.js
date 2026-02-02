@@ -170,6 +170,15 @@ const CustomerCoverPage = () => {
       const res = await axios.get(`${API_URL}/api/customers/${customerId}/360`);
       setData(res.data);
       setNotes(res.data.customer?.notes || "");
+      setCustomerDetails({
+        name: res.data.customer?.name || "",
+        email: res.data.customer?.email || "",
+        phone: res.data.customer?.phone || "",
+        company_id: res.data.customer?.company_id || "",
+        customer_type: res.data.customer?.customer_type || "individual"
+      });
+      setPaymentPrefs(res.data.customer?.payment_preferences || { preferred_method: "", upi_id: "", bank_account: "" });
+      setAiInsights(res.data.customer?.ai_insights || {});
     } catch (err) {
       toast.error("Failed to load customer data");
       navigate("/customers");
