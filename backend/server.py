@@ -1085,6 +1085,8 @@ Notify owner: {escalation_state.get("notify_owner", True)}
 7. Sound human, {tone.replace('_', ' ')}, not robotic
 8. NEVER ask customer for SKU, product code, item code, model number, or part number - customers don't know these
 9. If customer says "sure", "ok", "yes", "pricing" after you said "let me check" - say ESCALATE_REQUIRED
+10. CHECK CUSTOMER 360° PROFILE FIRST - if address exists, use it! Don't ask for info you already have
+11. If customer asks "send to my office/home", check SAVED ADDRESSES and confirm the address you have
 
 === SCOPE LOCK ===
 OUT OF SCOPE MESSAGE: "{scope_message}"
