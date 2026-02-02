@@ -330,6 +330,13 @@ class ExcludedNumberCreate(BaseModel):
     reason: str = ""
     is_temporary: bool = False
 
+# KB Article Create Model (for unanswered questions)
+class KbArticleCreateRequest(BaseModel):
+    title: str
+    content: str
+    category: str = "FAQ"
+    tags: List[str] = []
+
 class ExcludedNumberResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str
