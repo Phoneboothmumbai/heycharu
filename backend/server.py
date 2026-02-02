@@ -1032,7 +1032,7 @@ async def escalate_to_owner(customer: dict, conversation_history: str, customer_
         summary = "\n".join(history_lines) if history_lines else "New conversation"
         
         # NEW: Escalation message with unique code
-        escalation_msg = f"""🚨 *{escalation_code}* - Need Your Input
+        escalation_msg = f"""*{escalation_code}* - Need Your Input
 
 *Customer:* {customer_name}
 *Phone:* {customer_phone}
@@ -1045,7 +1045,7 @@ async def escalate_to_owner(customer: dict, conversation_history: str, customer_
 
 ---
 Reply with: *{escalation_code}: your answer*
-Example: {escalation_code}: Yes, we have it in stock for ₹45,000"""
+Example: {escalation_code}: Yes, we have it in stock"""
 
         # Send to owner
         await send_whatsapp_message(owner_phone, escalation_msg)
