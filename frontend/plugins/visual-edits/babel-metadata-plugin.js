@@ -1021,6 +1021,7 @@ const babelMetadataPlugin = ({ types: t }) => {
       }
     }
 
+    recursionDepth--;
     return {
       arrayVar,
       arrayFile,
@@ -1030,6 +1031,10 @@ const babelMetadataPlugin = ({ types: t }) => {
       indexParam,
       isEditable,
     };
+  } catch (e) {
+    recursionDepth--;
+    return null;
+  }
   }
 
   /**
