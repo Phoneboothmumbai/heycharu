@@ -1183,7 +1183,11 @@ Your reply:"""
             r"let me (check|verify|confirm)",
             r"could not find",
             r"not available",
-            r"do not have .* information"
+            r"do not have .* information",
+            r"time do",
+            r"time de",
+            r"confirm karne",
+            r"check karne"
         ]
         
         for pattern in not_found_patterns:
