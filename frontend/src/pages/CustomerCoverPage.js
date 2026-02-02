@@ -151,6 +151,19 @@ const CustomerCoverPage = () => {
   const [newTag, setNewTag] = useState("");
   const [isAddDeviceOpen, setIsAddDeviceOpen] = useState(false);
   const [deviceForm, setDeviceForm] = useState({ name: "", model: "", serial: "", purchase_date: "" });
+  
+  // New state for enhanced features
+  const [editingDetails, setEditingDetails] = useState(false);
+  const [customerDetails, setCustomerDetails] = useState({});
+  const [isAddAddressOpen, setIsAddAddressOpen] = useState(false);
+  const [addressForm, setAddressForm] = useState({ label: "", line1: "", line2: "", city: "", state: "", pincode: "", is_primary: false });
+  const [isAddNoteOpen, setIsAddNoteOpen] = useState(false);
+  const [newNoteContent, setNewNoteContent] = useState("");
+  const [isUploadInvoiceOpen, setIsUploadInvoiceOpen] = useState(false);
+  const [invoiceFile, setInvoiceFile] = useState(null);
+  const [invoiceDescription, setInvoiceDescription] = useState("");
+  const [aiInsights, setAiInsights] = useState({});
+  const [paymentPrefs, setPaymentPrefs] = useState({ preferred_method: "", upi_id: "", bank_account: "" });
 
   const fetchData = useCallback(async () => {
     try {
