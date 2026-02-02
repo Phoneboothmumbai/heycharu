@@ -99,6 +99,7 @@ const UnansweredQuestionsPage = () => {
       });
       toast.success(`Question marked as ${relevance}`);
       fetchQuestions();
+      fetchStats();
     } catch (error) {
       toast.error("Failed to update question");
     }
