@@ -88,7 +88,7 @@ const UnansweredQuestionsPage = () => {
     }
     
     try {
-      const token = localStorage.getItem("auth_token");
+      const token = localStorage.getItem("sales-brain-token");
       await axios.post(
         `${API_URL}/api/unanswered-questions/${selectedQuestion.id}/add-kb-article?title=${encodeURIComponent(newArticle.title)}&content=${encodeURIComponent(newArticle.content)}&category=${newArticle.category}`,
         {},
