@@ -1045,15 +1045,29 @@ Your reply (short, human, NO "Hi" if already greeted):"""
         
         # ========== STEP 4: ESCALATE OR RESPOND ==========
         if needs_escalation:
-            # Check if this is a simple greeting - do not escalate those
-            if is_simple_greeting:
-                logger.info(f"Skipping escalation for simple greeting: {message}")
-                return f"Hi! How can I help you today?"
+            # Check if this is a pure greeting or simple response - NEVER escalate these
+            if is_pure_greeting:
+                logger.info(f"Pure greeting detected, not escalating: {message}")
+                return "Hi! How can I help you today?"
+            
+            if is_simple_response:
+                logger.info(f"Simple response detected, not escalating: {message}")
+                if simple_message in ["thanks", "thank you"]:
+                    return "You are welcome!"
+                elif simple_message in ["ok", "okay", "cool", "great", "fine", "alright"]:
+                    return "Great! Let me know if you need anything else."
+                elif simple_message in ["yes"]:
+                    return "Sure, tell me more."
+                elif simple_message in ["no"]:
+                    return "No problem. What else can I help with?"
+                elif simple_message in ["bye", "goodbye"]:
+                    return "Bye! Take care."
+                return "Okay!"
             
             # Check if there is already a pending escalation for this customer
             if pending_escalation:
                 logger.info(f"Skipping escalation - already pending: {pending_escalation.get('escalation_code')}")
-                return "I'm still checking on your earlier question. I will have an answer for you shortly. Is there anything else I can help with in the meantime?"
+                return "Still checking on that for you - will update shortly!"
             
             logger.info(f"ESCALATING: {escalation_reason}")
             
