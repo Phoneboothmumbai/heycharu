@@ -883,7 +883,68 @@ const CustomerCoverPage = () => {
           </Card>
         </TabsContent>
 
-        {/* Notes & Tags Tab */}
+        {/* Invoices Tab - NEW */}
+        <TabsContent value="invoices">
+          <Card className="border-border/50">
+            <CardHeader className="pb-3 flex flex-row items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <FileText className="w-4 h-4" />
+                Invoices ({customerInvoices.length})
+              </CardTitle>
+              <Dialog open={isUploadInvoiceOpen} onOpenChange={setIsUploadInvoiceOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm"><Upload className="w-4 h-4 mr-1" />Upload Invoice</Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader><DialogTitle>Upload Invoice</DialogTitle></DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label>Select File (PDF, Image, etc.)</Label>
+                      <Input type="file" onChange={e => setInvoiceFile(e.target.files[0])} accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" />
+                    </div>
+                    <div>
+                      <Label>Description (optional)</Label>
+                      <Input value={invoiceDescription} onChange={e => setInvoiceDescription(e.target.value)} placeholder="e.g., Invoice #123 - iPhone purchase" />
+                    </div>
+                  </div>
+                  <DialogFooter><Button onClick={uploadInvoice}>Upload</Button></DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </CardHeader>
+            <CardContent>
+              {customerInvoices.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">No invoices uploaded. Click Upload to add.</p>
+              ) : (
+                <div className="space-y-3">
+                  {customerInvoices.map(invoice => (
+                    <div key={invoice.id} className="flex items-center justify-between p-3 rounded-lg bg-accent/50">
+                      <div className="flex items-center gap-3">
+                        <FileText className="w-8 h-8 text-blue-500" />
+                        <div>
+                          <p className="font-medium text-sm">{invoice.filename}</p>
+                          <p className="text-xs text-muted-foreground">{invoice.description || "No description"}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Uploaded by {invoice.uploaded_by} on {new Date(invoice.uploaded_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={() => downloadInvoice(invoice.id, invoice.filename)}>
+                          Download
+                        </Button>
+                        <Button variant="ghost" size="icon" className="text-red-500" onClick={() => deleteInvoice(invoice.id)}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Notes & Tags Tab - ENHANCED */}
         <TabsContent value="notes" className="space-y-4">
           <Card className="border-border/50">
             <CardHeader className="pb-3">
@@ -920,9 +981,60 @@ const CustomerCoverPage = () => {
             </CardContent>
           </Card>
 
+          {/* Multiple Notes - NEW */}
           <Card className="border-border/50">
             <CardHeader className="pb-3 flex flex-row items-center justify-between">
-              <CardTitle className="text-base">Internal Notes</CardTitle>
+              <CardTitle className="text-base flex items-center gap-2">
+                <StickyNote className="w-4 h-4" />
+                Notes History ({customerNotesHistory.length})
+              </CardTitle>
+              <Dialog open={isAddNoteOpen} onOpenChange={setIsAddNoteOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm"><Plus className="w-4 h-4 mr-1" />Add Note</Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader><DialogTitle>Add Note</DialogTitle></DialogHeader>
+                  <div className="space-y-4">
+                    <Textarea 
+                      value={newNoteContent} 
+                      onChange={e => setNewNoteContent(e.target.value)} 
+                      placeholder="Write your note here..."
+                      rows={4}
+                    />
+                  </div>
+                  <DialogFooter><Button onClick={addNote}>Add Note</Button></DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </CardHeader>
+            <CardContent>
+              {customerNotesHistory.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">No notes added yet. Click Add Note to start.</p>
+              ) : (
+                <div className="space-y-3">
+                  {customerNotesHistory.slice().reverse().map(note => (
+                    <div key={note.id} className="p-3 rounded-lg bg-accent/50 border-l-4 border-primary">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <p className="text-sm whitespace-pre-wrap">{note.content}</p>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            By {note.created_by} on {new Date(note.created_at).toLocaleString()}
+                          </p>
+                        </div>
+                        <Button variant="ghost" size="icon" className="text-red-500" onClick={() => deleteNote(note.id)}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Legacy Single Note - Keep for backward compatibility */}
+          <Card className="border-border/50">
+            <CardHeader className="pb-3 flex flex-row items-center justify-between">
+              <CardTitle className="text-base">Quick Note (Legacy)</CardTitle>
               {!editingNotes ? (
                 <Button variant="ghost" size="sm" onClick={() => setEditingNotes(true)}>
                   <Edit2 className="w-4 h-4 mr-1" />Edit
@@ -939,15 +1051,15 @@ const CustomerCoverPage = () => {
                   value={notes} 
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Add internal notes about this customer..."
-                  rows={6}
+                  rows={4}
                   className="resize-none"
                 />
               ) : (
-                <div className="p-4 rounded-lg bg-accent/50 min-h-[100px]">
+                <div className="p-4 rounded-lg bg-accent/50 min-h-[80px]">
                   {notes ? (
                     <p className="text-sm whitespace-pre-wrap">{notes}</p>
                   ) : (
-                    <p className="text-sm text-muted-foreground">No notes yet. Click Edit to add notes.</p>
+                    <p className="text-sm text-muted-foreground">No quick note. Click Edit to add.</p>
                   )}
                 </div>
               )}
