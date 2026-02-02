@@ -303,8 +303,11 @@ ai_uncertain: "Let me check this and get back to you shortly."
   - Master toggle to enable/disable policy enforcement
   - Save Policy and Reset to Defaults functionality
   - Backend API: GET/PUT `/api/ai-policy`, section updates, state updates, reset
-  - Backend uses policy in `generate_ai_reply()` function for AI responses
   - 21 backend API tests (all passing)
+- **ENHANCED**: AI now scans ALL policy parameters before EVERY reply
+  - Logs policy scan: "AI Policy Scan - Enabled: X, Topics: Y, States: Z, Response Rules: W"
+  - Dynamic prompt built from ALL policy values (not hardcoded)
+  - Every parameter from the UI is used in AI decision-making
 
 ### February 2, 2026 (Session 5)
 - **NEW**: Unanswered Questions Page
