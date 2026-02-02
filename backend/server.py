@@ -146,12 +146,17 @@ class ConversationResponse(BaseModel):
     customer_name: str
     customer_phone: str
     channel: str
-    status: str
+    status: str  # active, escalated, waiting_for_owner, resolved
     last_message: Optional[str] = None
     last_message_at: Optional[str] = None
     unread_count: int = 0
     topics: List[TopicResponse] = []
     created_at: str
+    # Status tracking fields
+    escalated_at: Optional[str] = None
+    escalation_reason: Optional[str] = None
+    sla_deadline: Optional[str] = None  # When owner must respond by
+    sla_reminders_sent: int = 0
 
 class ProductCreate(BaseModel):
     name: str
