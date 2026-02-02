@@ -659,6 +659,7 @@ const babelMetadataPlugin = ({ types: t }) => {
       // Analyze the root identifier
       const rootInfo = analyzeIdentifier(rootName, exprPath, state);
       if (rootInfo) {
+        recursionDepth--;
         return {
           ...rootInfo,
           path: propPath,
@@ -666,7 +667,12 @@ const babelMetadataPlugin = ({ types: t }) => {
       }
     }
 
+    recursionDepth--;
     return { type: "unknown", path: propPath, isEditable: false };
+  } catch (e) {
+    recursionDepth--;
+    return { type: "unknown", path: "", isEditable: false };
+  }
   }
 
   /**
