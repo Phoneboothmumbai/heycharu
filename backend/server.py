@@ -3133,23 +3133,51 @@ async def handle_incoming_whatsapp(data: WhatsAppIncoming):
         if owner_phone and phone[-10:] == owner_phone[-10:]:
             # This is from the owner
             
-            # CHECK 2a: Is this a reply to an escalation?
-            pending_escalation = await db.escalations.find_one(
-                {"status": "pending_owner_reply"},
-                {"_id": 0},
-                sort=[("created_at", -1)]
-            )
+            # Parse escalation code from message (e.g., "ESC01: Here's the answer")
+            escalation_code, actual_reply = parse_escalation_code_from_message(data.message)
             
-            if pending_escalation and not data.message.lower().startswith("customer"):
-                # Owner is replying to escalation - polish and forward to customer
-                customer_phone = pending_escalation.get("customer_phone")
-                customer_name = pending_escalation.get("customer_name", "Customer")
-                original_question = pending_escalation.get("customer_message", "")
+            # CHECK 2a: Is this a reply to a specific escalation?
+            if escalation_code:
+                # Find the specific escalation by code
+                target_escalation = await db.escalations.find_one(
+                    {"escalation_code": escalation_code, "status": "pending_owner_reply"},
+                    {"_id": 0}
+                )
+                
+                if not target_escalation:
+                    # Code not found or already resolved
+                    await send_whatsapp_message(phone, f"⚠️ Escalation {escalation_code} not found or already resolved.\n\nPending escalations:")
+                    
+                    # List pending escalations
+                    pending_list = await db.escalations.find(
+                        {"status": "pending_owner_reply"},
+                        {"_id": 0, "escalation_code": 1, "customer_name": 1, "customer_message": 1}
+                    ).to_list(10)
+                    
+                    if pending_list:
+                        pending_msg = "\n".join([
+                            f"• *{p['escalation_code']}* - {p['customer_name']}: {p['customer_message'][:50]}..."
+                            for p in pending_list
+                        ])
+                        await send_whatsapp_message(phone, pending_msg)
+                    else:
+                        await send_whatsapp_message(phone, "No pending escalations.")
+                    
+                    return {
+                        "success": False,
+                        "mode": "owner_reply_invalid",
+                        "message": f"Escalation {escalation_code} not found"
+                    }
+                
+                # Found the correct escalation - process the reply
+                customer_phone = target_escalation.get("customer_phone")
+                customer_name = target_escalation.get("customer_name", "Customer")
+                original_question = target_escalation.get("customer_message", "")
                 
                 if customer_phone:
-                    owner_reply = data.message.strip()
+                    owner_reply = actual_reply.strip()
                     
-                    # Polish the reply using AI - keep meaning, make professional
+                    # Polish the reply using AI
                     try:
                         polish_prompt = f"""Polish this owner's reply to make it professional and friendly for a customer.
 
@@ -3170,14 +3198,167 @@ Write the polished reply:"""
 
                         chat = LlmChat(
                             api_key=EMERGENT_LLM_KEY,
-                            session_id=f"polish-{pending_escalation['id']}",
+                            session_id=f"polish-{target_escalation['id']}",
                             system_message="You are a helpful store assistant. Polish the owner's reply to make it professional and friendly."
                         ).with_model("openai", "gpt-5.2")
                         
                         polished_reply = await chat.send_message(UserMessage(text=polish_prompt))
                         
-                        # Use polished reply if valid, otherwise use original
                         if polished_reply and len(polished_reply.strip()) > 10:
+                            formatted_reply = polished_reply.strip()
+                        else:
+                            formatted_reply = owner_reply
+                            
+                    except Exception as e:
+                        logger.error(f"Failed to polish reply: {e}")
+                        formatted_reply = owner_reply
+                        if len(owner_reply) < 50 and not owner_reply.endswith(('.', '!', '?')):
+                            formatted_reply = owner_reply + "."
+                    
+                    # Send polished reply to the customer
+                    await send_whatsapp_message(customer_phone, formatted_reply)
+                    
+                    # Mark this specific escalation as resolved
+                    await db.escalations.update_one(
+                        {"id": target_escalation["id"]},
+                        {"$set": {
+                            "status": "resolved",
+                            "owner_reply": owner_reply,
+                            "formatted_reply": formatted_reply,
+                            "resolved_at": datetime.now(timezone.utc).isoformat()
+                        }}
+                    )
+                    
+                    # Save message in customer's conversation
+                    conv = await db.conversations.find_one(
+                        {"customer_phone": {"$regex": customer_phone[-10:]}},
+                        {"_id": 0}
+                    )
+                    if conv:
+                        await db.messages.insert_one({
+                            "id": str(uuid.uuid4()),
+                            "conversation_id": conv["id"],
+                            "content": formatted_reply,
+                            "sender_type": "agent",
+                            "message_type": "text",
+                            "escalation_code": escalation_code,
+                            "attachments": [],
+                            "created_at": datetime.now(timezone.utc).isoformat()
+                        })
+                        
+                        # Update conversation status
+                        await db.conversations.update_one(
+                            {"id": conv["id"]},
+                            {"$set": {
+                                "last_message": formatted_reply,
+                                "last_message_at": datetime.now(timezone.utc).isoformat(),
+                                "status": "active",
+                                "escalated_at": None,
+                                "escalation_reason": None,
+                                "current_escalation_code": None,
+                                "sla_deadline": None,
+                                "sla_reminders_sent": 0
+                            }}
+                        )
+                    
+                    # Confirm to owner
+                    preview = formatted_reply[:80] + "..." if len(formatted_reply) > 80 else formatted_reply
+                    await send_whatsapp_message(phone, f"✓ {escalation_code} resolved!\nSent to {customer_name}:\n\n\"{preview}\"")
+                    
+                    logger.info(f"Owner reply for {escalation_code} polished and forwarded to customer: {customer_phone}")
+                    return {
+                        "success": True,
+                        "mode": "owner_reply_forwarded",
+                        "escalation_code": escalation_code,
+                        "customer_phone": customer_phone
+                    }
+            
+            # No escalation code - check if there are any pending escalations
+            pending_escalations = await db.escalations.find(
+                {"status": "pending_owner_reply"},
+                {"_id": 0}
+            ).to_list(10)
+            
+            if pending_escalations and not data.message.lower().startswith(("customer", "lead", "inject")):
+                # There are pending escalations but owner didn't specify which one
+                if len(pending_escalations) == 1:
+                    # Only one pending - assume it's for that one (backward compatible)
+                    target_escalation = pending_escalations[0]
+                    escalation_code = target_escalation.get("escalation_code", "ESC??")
+                    customer_phone = target_escalation.get("customer_phone")
+                    customer_name = target_escalation.get("customer_name", "Customer")
+                    original_question = target_escalation.get("customer_message", "")
+                    
+                    if customer_phone:
+                        owner_reply = data.message.strip()
+                        
+                        # Polish and send (same logic as above)
+                        try:
+                            polish_prompt = f"""Polish this owner's reply to make it professional and friendly.
+ORIGINAL CUSTOMER QUESTION: "{original_question}"
+OWNER'S RAW REPLY: "{owner_reply}"
+RULES: Keep ALL info same, be friendly, 2-4 sentences, no mention of owner/boss.
+Write the polished reply:"""
+
+                            chat = LlmChat(
+                                api_key=EMERGENT_LLM_KEY,
+                                session_id=f"polish-{target_escalation['id']}",
+                                system_message="Polish the owner's reply professionally."
+                            ).with_model("openai", "gpt-5.2")
+                            
+                            polished_reply = await chat.send_message(UserMessage(text=polish_prompt))
+                            formatted_reply = polished_reply.strip() if polished_reply and len(polished_reply.strip()) > 10 else owner_reply
+                        except:
+                            formatted_reply = owner_reply
+                        
+                        await send_whatsapp_message(customer_phone, formatted_reply)
+                        
+                        await db.escalations.update_one(
+                            {"id": target_escalation["id"]},
+                            {"$set": {
+                                "status": "resolved",
+                                "owner_reply": owner_reply,
+                                "formatted_reply": formatted_reply,
+                                "resolved_at": datetime.now(timezone.utc).isoformat()
+                            }}
+                        )
+                        
+                        # Update conversation
+                        conv = await db.conversations.find_one({"customer_phone": {"$regex": customer_phone[-10:]}}, {"_id": 0})
+                        if conv:
+                            await db.messages.insert_one({
+                                "id": str(uuid.uuid4()),
+                                "conversation_id": conv["id"],
+                                "content": formatted_reply,
+                                "sender_type": "agent",
+                                "message_type": "text",
+                                "attachments": [],
+                                "created_at": datetime.now(timezone.utc).isoformat()
+                            })
+                            await db.conversations.update_one(
+                                {"id": conv["id"]},
+                                {"$set": {"last_message": formatted_reply, "last_message_at": datetime.now(timezone.utc).isoformat(), "status": "active"}}
+                            )
+                        
+                        await send_whatsapp_message(phone, f"✓ {escalation_code} resolved!\nSent to {customer_name}")
+                        return {"success": True, "mode": "owner_reply_forwarded", "escalation_code": escalation_code}
+                else:
+                    # Multiple pending escalations - ask owner to specify
+                    pending_msg = "⚠️ Multiple pending escalations. Please reply with the escalation code:\n\n"
+                    for esc in pending_escalations:
+                        code = esc.get("escalation_code", "ESC??")
+                        name = esc.get("customer_name", "Unknown")
+                        msg = esc.get("customer_message", "")[:40]
+                        pending_msg += f"• *{code}*: {name} - \"{msg}...\"\n"
+                    
+                    pending_msg += f"\nExample: {pending_escalations[0].get('escalation_code', 'ESC01')}: your answer"
+                    await send_whatsapp_message(phone, pending_msg)
+                    
+                    return {
+                        "success": False,
+                        "mode": "owner_needs_to_specify",
+                        "pending_count": len(pending_escalations)
+                    }
                             formatted_reply = polished_reply.strip()
                         else:
                             formatted_reply = owner_reply
