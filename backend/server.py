@@ -888,24 +888,31 @@ Devices: {', '.join([d.get('model', '') for d in customer.get('devices', [])[:3]
         has_products = len(products) > 0
         source_verified = has_kb or has_products
         
-        # ========== PRE-CHECK: Detect conversation state ==========
+        # ========== PRE-CHECK: Detect conversation state using POLICY ==========
         simple_message = message.strip().lower()
         
-        # Pure greetings (no intent)
-        pure_greetings = ["hi", "hello", "hey", "good morning", "good afternoon", "good evening", "hii", "hiii", "hlo", "helo"]
+        # Get state triggers from policy
+        greeting_state = states_config.get("GREETING", {})
+        closure_state = states_config.get("CLOSURE", {})
+        
+        # Pure greetings (from policy or defaults)
+        pure_greetings = greeting_state.get("triggers", ["hi", "hello", "hey", "good morning", "good afternoon", "good evening", "hii", "hiii", "hlo", "helo"])
         is_pure_greeting = simple_message in pure_greetings
         
-        # Simple responses (not greetings but simple)
-        simple_responses = ["thanks", "thank you", "ok", "okay", "yes", "no", "bye", "goodbye", "cool", "great", "fine", "alright"]
-        is_simple_response = simple_message in simple_responses
+        # Closure triggers (from policy or defaults)
+        closure_triggers = closure_state.get("triggers", ["thanks", "thank you", "ok", "okay", "bye", "goodbye"])
+        is_closure_message = simple_message in closure_triggers
+        closure_templates = closure_state.get("templates", {})
         
         # Check if this is the FIRST message or a fresh greeting
         is_first_message = len(past_messages) == 0
         
         # For pure greetings, we should NOT load conversation history context
-        # This prevents the AI from referencing old topics
-        if is_pure_greeting:
-            conversation_history = "[Fresh greeting - do not reference past topics]"
+        # This prevents the AI from referencing old topics (policy enforcement)
+        if is_pure_greeting and greeting_state.get("enabled", True):
+            forbidden = greeting_state.get("forbidden_actions", [])
+            if "past_context_reference" in forbidden:
+                conversation_history = "[Fresh greeting - do not reference past topics]"
         
         # Check for pending escalation for this customer
         pending_escalation = await db.escalations.find_one(
