@@ -670,140 +670,156 @@ async def generate_ai_reply(customer_id: str, conversation_id: str, message: str
         ai_instructions = settings.get("ai_instructions", "") if settings else ""
         business_name = settings.get("business_name", "NeoStore") if settings else "NeoStore"
         
-        # Get products from database for context - get more products with full details
-        products = await db.products.find({"is_active": True}, {"_id": 0, "name": 1, "base_price": 1, "category": 1, "sku": 1}).to_list(100)
-        product_catalog = "\n".join([f"- {p['name']}: ₹{p.get('base_price', 0):,.0f}" for p in products]) if products else ""
+        # STEP 1: Get customer profile and history
+        customer_history = await db.messages.find(
+            {"conversation_id": conversation_id},
+            {"_id": 0}
+        ).sort("created_at", -1).limit(20).to_list(20)
         
-        # Get KB articles for context
-        kb_articles = await db.knowledge_base.find({"is_active": True}, {"_id": 0, "title": 1, "content": 1}).to_list(30)
-        kb_context = "\n\n".join([f"**{kb['title']}**\n{kb['content'][:800]}" for kb in kb_articles]) if kb_articles else ""
+        # Build conversation history
+        history_lines = []
+        for m in reversed(customer_history):
+            sender = "Customer" if m.get("sender_type") == "customer" else "Assistant"
+            content = m.get("content", "")[:200]
+            history_lines.append(f"{sender}: {content}")
+        conversation_history = "\n".join(history_lines) if history_lines else "No previous messages"
         
-        # Get active topic for this customer
+        # Get customer preferences and past enquiries
+        customer_context = f"""
+Customer Name: {customer.get('name', 'Unknown')}
+Phone: {customer.get('phone', 'Unknown')}
+Customer Type: {customer.get('customer_type', 'individual')}
+Tags: {', '.join(customer.get('tags', []))}
+Notes: {customer.get('notes', '')[:200]}
+Past Devices: {', '.join([d.get('model', '') for d in customer.get('devices', [])[:3]])}
+"""
+        
+        # STEP 2: Knowledge Lookup - KB articles
+        kb_articles = await db.knowledge_base.find({"is_active": True}, {"_id": 0, "title": 1, "content": 1, "category": 1}).to_list(50)
+        kb_content = ""
+        if kb_articles:
+            kb_content = "\n\n".join([f"[{kb.get('category', 'general').upper()}] {kb['title']}:\n{kb['content'][:600]}" for kb in kb_articles])
+        
+        # STEP 2: Knowledge Lookup - Products (from Excel/database)
+        products = await db.products.find({"is_active": True}, {"_id": 0, "name": 1, "base_price": 1, "category": 1, "sku": 1}).to_list(200)
+        product_catalog = ""
+        if products:
+            product_catalog = "\n".join([f"- {p['name']}: ₹{p.get('base_price', 0):,.0f} (SKU: {p.get('sku', 'N/A')})" for p in products])
+        
+        # Get active topic
         active_topic = await db.topics.find_one(
             {"customer_id": customer_id, "status": {"$in": ["open", "in_progress"]}},
             {"_id": 0},
             sort=[("created_at", -1)]
         )
+        topic_info = f"Active Topic: {active_topic.get('title', 'General')}" if active_topic else ""
         
-        # Load recent conversation history - THIS IS CRITICAL
-        recent_messages = await db.messages.find(
-            {"conversation_id": conversation_id},
-            {"_id": 0}
-        ).sort("created_at", -1).limit(15).to_list(15)
-        
-        # Build conversation history string
-        history_lines = []
-        for m in reversed(recent_messages):
-            sender = "Customer" if m.get("sender_type") == "customer" else "You"
-            content = m.get("content", "")[:200]
-            history_lines.append(f"{sender}: {content}")
-        
-        conversation_history = "\n".join(history_lines) if history_lines else "No previous messages"
-        
-        # Determine topic type
-        topic_info = ""
-        if active_topic:
-            topic_info = f"Current Topic: {active_topic.get('title', 'General')}"
-        
-        # Build custom instructions section
-        custom_instructions = ""
-        if ai_instructions and ai_instructions.strip():
-            custom_instructions = f"""
-BUSINESS INSTRUCTIONS (MUST FOLLOW):
-{ai_instructions}
-"""
-        
-        # Check if we have any product/KB data
-        has_product_data = len(products) > 0
-        has_kb_data = len(kb_articles) > 0
-        
-        # Build prompt based on available data
-        system_prompt = f"""You are a helpful sales assistant for {business_name}. 
-{custom_instructions}
-CUSTOMER: {customer.get('name', 'Customer')}
+        # Build the system prompt with STRICT FLOW CONTROL
+        system_prompt = f"""ROLE: You are a Customer Support Assistant for {business_name}.
+You must respond ONLY using approved sources and strictly follow the defined flow.
+
+{f"BUSINESS INSTRUCTIONS:{chr(10)}{ai_instructions}" if ai_instructions else ""}
+
+=== CUSTOMER PROFILE ===
+{customer_context}
 {topic_info}
 
-{"PRODUCT CATALOG:" + chr(10) + product_catalog if has_product_data else "NOTE: No products in database yet."}
-
-{f"KNOWLEDGE BASE:{chr(10)}{kb_context}" if has_kb_data else ""}
-
-CONVERSATION SO FAR:
+=== CONVERSATION HISTORY ===
 {conversation_history}
 
-IMPORTANT RULES:
-1. ANSWER questions using the PRODUCT CATALOG and KNOWLEDGE BASE above
-2. If the customer asks about a product IN the catalog, give the price from catalog
-3. If the customer asks about a product NOT in catalog, say: "ESCALATE: Need pricing for [product name]"
-4. For general questions (greetings, thanks, how are you), respond normally - DO NOT escalate
-5. Keep replies short and friendly (2-3 sentences)
-6. DO NOT ask for photos, budget, or repeat questions already asked
-7. DO NOT say "let me check" - either answer from catalog/KB or escalate
+=== KNOWLEDGE BASE ===
+{kb_content if kb_content else "No KB articles available."}
+
+=== PRODUCT CATALOG ===
+{product_catalog if product_catalog else "No products in catalog."}
+
+=== DECISION LOGIC (FOLLOW EXACTLY) ===
+
+STEP 1: Check if the answer exists in:
+- Knowledge Base (above)
+- Product Catalog (above)
+- Customer context/history
+
+STEP 2: Make decision:
+
+IF answer IS FOUND in KB/Catalog/Context:
+→ Reply with accurate, professional, to-the-point response
+→ Use prices EXACTLY as shown in catalog
+→ Keep response short (2-3 sentences)
+
+IF answer IS NOT FOUND:
+→ Reply with EXACTLY: "NOT_FOUND: [brief description of what's needed]"
+→ Do NOT guess or make up information
+→ Do NOT ask clarifying questions
+→ Do NOT say "I don't have that information"
+
+=== STRICT RULES ===
+- ❌ No guessing or assumptions
+- ❌ No replies outside Apple products, repairs, IT products, IT services
+- ❌ No random responses
+- ❌ No repeated questions
+- ❌ No self-generated prices or specs
+- ✅ Use ONLY data from KB and Product Catalog
+- ✅ Be accurate, professional, concise
 
 Customer's new message: "{message}"
 
-Reply (use catalog/KB data if available, only say "ESCALATE: [reason]" if product is NOT in catalog):"""
+Your reply (use KB/Catalog data, or say "NOT_FOUND: [reason]" if info missing):"""
 
         # Generate response
         chat = LlmChat(
             api_key=EMERGENT_LLM_KEY,
             session_id=f"conv-{conversation_id}",
-            system_message=system_prompt
+            system_message="You are a customer support assistant. Follow instructions exactly."
         ).with_model("openai", "gpt-5.2")
         
-        user_msg = UserMessage(text=message)
+        user_msg = UserMessage(text=system_prompt)
         response = await chat.send_message(user_msg)
         
         # Check if response is empty
         if not response or len(response.strip()) == 0:
             logger.warning(f"AI returned empty response for message: {message[:50]}")
-            
-            # RETRY: Try once more with fresh context
             if retry_count < 1:
-                logger.info("Retrying AI response...")
                 return await generate_ai_reply(customer_id, conversation_id, message, retry_count + 1)
-            
-            # ESCALATE: Notify owner and respond to customer
             await escalate_to_owner(customer, conversation_history, message, "AI returned empty response")
-            return "Let me check on that and get back to you shortly."
+            return "Let me check this and get back to you."
         
         import re
         
-        # CHECK FOR ESCALATION REQUEST - anywhere in the response
+        # Check for NOT_FOUND or ESCALATE patterns
         needs_escalation = False
         escalation_reason = ""
         
-        if "ESCALATE:" in response.upper():
+        # Detect explicit escalation markers
+        if "NOT_FOUND:" in response.upper() or "ESCALATE:" in response.upper():
             needs_escalation = True
-            escalation_match = re.search(r'ESCALATE:\s*(.+?)(?:\n|$)', response, re.IGNORECASE)
-            escalation_reason = escalation_match.group(1).strip() if escalation_match else "Customer needs assistance"
+            match = re.search(r'(NOT_FOUND|ESCALATE):\s*(.+?)(?:\n|$)', response, re.IGNORECASE)
+            escalation_reason = match.group(2).strip() if match else f"Customer query: {message[:50]}"
         
-        # Also detect "we don't have", "not in our list", "don't have the price", etc.
-        uncertain_patterns = [
+        # Detect uncertainty phrases
+        uncertainty_patterns = [
             r"we don't have",
             r"don't have the (price|pricing|info|information)",
             r"not in our (list|catalog|database)",
-            r"don't have .* (confirmed|latest|current) price",
-            r"not listed",
+            r"not available in .* (list|catalog)",
             r"no pricing",
-            r"i'll need to check",
+            r"i('ll| will) need to check",
             r"let me (check|verify|confirm)",
-            r"i don't have .* information"
+            r"i don't have .* information",
+            r"not listed",
+            r"couldn't find"
         ]
         
-        for pattern in uncertain_patterns:
+        for pattern in uncertainty_patterns:
             if re.search(pattern, response.lower()):
                 needs_escalation = True
-                escalation_reason = f"AI indicated missing info: {message[:50]}"
+                escalation_reason = f"Missing info for: {message[:50]}"
                 break
         
         if needs_escalation:
             logger.info(f"Escalating to owner: {escalation_reason}")
-            
-            # Send escalation to owner
             await escalate_to_owner(customer, conversation_history, message, escalation_reason)
-            
-            # Always send a clean, friendly response to customer
-            return "Let me check this for you and get back to you shortly! 🙏"
+            return "Let me check this and get back to you."
         
         # Update topic if exists
         if active_topic:
