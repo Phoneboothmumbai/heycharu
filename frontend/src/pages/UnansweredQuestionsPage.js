@@ -30,11 +30,34 @@ const UnansweredQuestionsPage = () => {
   const [kbArticles, setKbArticles] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState(null);
+  
+  // Stats (separate from filtered list)
+  const [stats, setStats] = useState({ pending: 0, overdue: 0, resolved: 0, irrelevant: 0 });
 
   useEffect(() => {
     fetchQuestions();
     fetchKbArticles();
+    fetchStats();
   }, [filterStatus, filterRelevance]);
+
+  const fetchStats = async () => {
+    try {
+      const token = localStorage.getItem("sales-brain-token");
+      // Fetch all questions for stats
+      const response = await axios.get(`${API_URL}/api/unanswered-questions?status=all`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const allQuestions = response.data;
+      setStats({
+        pending: allQuestions.filter(q => q.status === "pending_owner_reply").length,
+        overdue: allQuestions.filter(q => q.is_overdue).length,
+        resolved: allQuestions.filter(q => q.status === "resolved").length,
+        irrelevant: allQuestions.filter(q => q.relevance === "irrelevant").length
+      });
+    } catch (error) {
+      console.error("Failed to fetch stats");
+    }
+  };
 
   const fetchQuestions = async () => {
     try {
