@@ -795,7 +795,7 @@ Devices: {', '.join([d.get('model', '') for d in customer.get('devices', [])[:3]
             {"_id": 0, "name": 1, "base_price": 1, "category": 1, "sku": 1}
         ).to_list(200)
         product_catalog = "\n".join([
-            f"• {p['name']}: ₹{p.get('base_price', 0):,.0f}"
+            f"• {p['name']}: Rs.{p.get('base_price', 0):,.0f}"
             for p in products
         ]) if products else ""
         
@@ -1119,7 +1119,7 @@ DEFAULT_TEMPLATES = {
     "no_response": "Just checking in — let me know if you need any help with {topic}.",
     "partial_conversation": "Sharing a quick reminder — I was waiting for your response on {topic}.",
     "price_shared": "Let me know if you'd like me to proceed or need any clarification on the pricing.",
-    "order_confirmed": "Thanks for confirming your order! I'm sharing the payment details below. Total: ₹{amount}",
+    "order_confirmed": "Thanks for confirming your order! I'm sharing the payment details below. Total: Rs.{amount}",
     "payment_received": "Payment received [OK] We will update you once the order is processed.",
     "order_completed": "Your order has been completed. Let us know if you need anything else!",
     "ticket_created": "We've created a support ticket for this. Ticket ID: #{ticket_id}",
@@ -1603,7 +1603,7 @@ async def upload_excel_to_kb(file: UploadFile = File(...), user: dict = Depends(
                 price = 0
                 if price_col and pd.notna(row.get(price_col)):
                     try:
-                        price_val = str(row.get(price_col)).replace(',', '').replace('₹', '').replace('$', '').strip()
+                        price_val = str(row.get(price_col)).replace(',', '').replace('Rs.', '').replace('$', '').strip()
                         price = float(price_val) if price_val and price_val != 'nan' else 0
                     except:
                         price = 0
@@ -2321,7 +2321,7 @@ async def inject_lead(data: LeadInjectionCreate, user: dict = Depends(get_curren
     )
     
     if product:
-        outbound_msg = f"Hi {customer['name'].split()[0]}! This is from the store. I understand you're interested in the {product['name']}. It's available at ₹{product['base_price']:,.0f}. Would you like me to share more details about specifications and availability?"
+        outbound_msg = f"Hi {customer['name'].split()[0]}! This is from the store. I understand you're interested in the {product['name']}. It's available at Rs.{product['base_price']:,.0f}. Would you like me to share more details about specifications and availability?"
     else:
         outbound_msg = f"Hi {customer['name'].split()[0]}! This is from the store. I understand you're interested in {data.product_interest}. I'd be happy to help you with the details. What specifically would you like to know?"
     
@@ -2463,11 +2463,11 @@ async def delete_customer(customer_id: str, user: dict = Depends(get_current_use
         raise HTTPException(status_code=404, detail="Customer not found")
     return {"message": "Customer deleted"}
 
-# ============== CUSTOMER 360° VIEW ==============
+# ============== CUSTOMER 360deg VIEW ==============
 
 @api_router.get("/customers/{customer_id}/360")
 async def get_customer_360(customer_id: str, user: dict = Depends(get_current_user)):
-    """Get comprehensive 360° view of a customer with all related data"""
+    """Get comprehensive 360deg view of a customer with all related data"""
     
     # Get customer base data
     customer = await db.customers.find_one({"id": customer_id}, {"_id": 0})
@@ -2539,7 +2539,7 @@ async def get_customer_360(customer_id: str, user: dict = Depends(get_current_us
     pending_orders = len([o for o in orders if o.get("status") in ["pending", "processing"]])
     completed_orders = len([o for o in orders if o.get("status") == "delivered"])
     
-    # Build 360° response
+    # Build 360deg response
     return {
         "customer": customer,
         "statistics": {
@@ -2776,7 +2776,7 @@ async def ai_chat(request: AIMessageRequest, user: dict = Depends(get_current_us
         context = f"""You are a friendly sales assistant. KEEP REPLIES SHORT like WhatsApp messages (1-3 sentences max).
 
 CUSTOMER INFO:
-Name: {customer.get('name')} | Phone: {customer.get('phone')} | Spent: ₹{customer.get('total_spent', 0)}
+Name: {customer.get('name')} | Phone: {customer.get('phone')} | Spent: Rs.{customer.get('total_spent', 0)}
 Addresses: {json.dumps(customer.get('addresses', []))}
 Devices: {json.dumps(customer.get('devices', []))}
 
@@ -3021,7 +3021,7 @@ async def create_order(order: OrderCreate, user: dict = Depends(get_current_user
         "customer_name": customer["name"],
         "order_id": order_id,
         "subject": f"New Order - {customer['name']}",
-        "description": f"Order placed with {len(order.items)} items. Total: ₹{total:.2f}",
+        "description": f"Order placed with {len(order.items)} items. Total: Rs.{total:.2f}",
         "priority": "medium",
         "status": "open",
         "category": "order",
@@ -3975,7 +3975,7 @@ async def inject_lead_internal(customer_name: str, phone: str, product_interest:
 Thanks for reaching out to {store_name}!
 
 I see you're interested in the {product['name']}.
-It's available at ₹{product['base_price']:,.0f}.
+It's available at Rs.{product['base_price']:,.0f}.
 
 How can I help you today—more details, availability, or anything else?"""
     elif product_interest and product_interest != "General Inquiry":
@@ -4320,7 +4320,7 @@ async def seed_data():
         {"id": str(uuid.uuid4()), "title": "Delivery Timelines", "category": "policy", "content": "Standard delivery: 3-5 business days. Express delivery: 1-2 business days. Same-day delivery available in select cities.", "tags": ["delivery", "shipping"], "is_active": True, "created_at": now, "updated_at": now},
         {"id": str(uuid.uuid4()), "title": "Warranty Information", "category": "policy", "content": "All Apple products come with 1-year manufacturer warranty. Extended warranty available for purchase.", "tags": ["warranty", "apple"], "is_active": True, "created_at": now, "updated_at": now},
         {"id": str(uuid.uuid4()), "title": "Screen Repair Process", "category": "procedure", "content": "1. Bring device to store 2. Diagnostic check (30 mins) 3. Quote provided 4. Repair (1-3 hours) 5. Quality check 6. Pickup", "tags": ["repair", "screen"], "is_active": True, "created_at": now, "updated_at": now},
-        {"id": str(uuid.uuid4()), "title": "Payment Methods", "category": "faq", "content": "We accept: Cash, Credit/Debit Cards, UPI, Net Banking, EMI options available on purchases above ₹10,000", "tags": ["payment", "emi"], "is_active": True, "created_at": now, "updated_at": now},
+        {"id": str(uuid.uuid4()), "title": "Payment Methods", "category": "faq", "content": "We accept: Cash, Credit/Debit Cards, UPI, Net Banking, EMI options available on purchases above Rs.10,000", "tags": ["payment", "emi"], "is_active": True, "created_at": now, "updated_at": now},
     ]
     await db.knowledge_base.insert_many(kb_articles)
     
