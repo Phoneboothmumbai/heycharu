@@ -668,15 +668,15 @@ async def generate_ai_reply(customer_id: str, conversation_id: str, message: str
         # Load settings for AI instructions
         settings = await db.settings.find_one({"type": "global"}, {"_id": 0})
         ai_instructions = settings.get("ai_instructions", "") if settings else ""
-        business_name = settings.get("business_name", "our store") if settings else "our store"
+        business_name = settings.get("business_name", "NeoStore") if settings else "NeoStore"
         
-        # Get products from database for context
-        products = await db.products.find({"is_active": True}, {"_id": 0, "name": 1, "base_price": 1, "category": 1}).to_list(50)
-        product_catalog = "\n".join([f"- {p['name']}: ₹{p.get('base_price', 0):,.0f}" for p in products]) if products else "No products in catalog"
+        # Get products from database for context - get more products with full details
+        products = await db.products.find({"is_active": True}, {"_id": 0, "name": 1, "base_price": 1, "category": 1, "sku": 1}).to_list(100)
+        product_catalog = "\n".join([f"- {p['name']}: ₹{p.get('base_price', 0):,.0f}" for p in products]) if products else ""
         
         # Get KB articles for context
-        kb_articles = await db.knowledge_base.find({"is_active": True}, {"_id": 0, "title": 1, "content": 1}).to_list(20)
-        kb_context = "\n\n".join([f"**{kb['title']}**\n{kb['content'][:500]}" for kb in kb_articles]) if kb_articles else ""
+        kb_articles = await db.knowledge_base.find({"is_active": True}, {"_id": 0, "title": 1, "content": 1}).to_list(30)
+        kb_context = "\n\n".join([f"**{kb['title']}**\n{kb['content'][:800]}" for kb in kb_articles]) if kb_articles else ""
         
         # Get active topic for this customer
         active_topic = await db.topics.find_one(
@@ -713,33 +713,35 @@ BUSINESS INSTRUCTIONS (MUST FOLLOW):
 {ai_instructions}
 """
         
-        # Simple, focused prompt
-        system_prompt = f"""You are a helpful assistant for {business_name}. 
+        # Check if we have any product/KB data
+        has_product_data = len(products) > 0
+        has_kb_data = len(kb_articles) > 0
+        
+        # Build prompt based on available data
+        system_prompt = f"""You are a helpful sales assistant for {business_name}. 
 {custom_instructions}
 CUSTOMER: {customer.get('name', 'Customer')}
 {topic_info}
 
-AVAILABLE PRODUCTS:
-{product_catalog}
+{"PRODUCT CATALOG:" + chr(10) + product_catalog if has_product_data else "NOTE: No products in database yet."}
 
-{f"KNOWLEDGE BASE:{chr(10)}{kb_context}" if kb_context else ""}
+{f"KNOWLEDGE BASE:{chr(10)}{kb_context}" if has_kb_data else ""}
 
 CONVERSATION SO FAR:
 {conversation_history}
 
-RULES:
-1. Read the conversation above - DO NOT repeat questions already asked
-2. DO NOT ask for photos, pictures, or videos
-3. DO NOT ask about budget unless customer mentions price concerns
-4. Keep replies short (1-3 sentences max)
-5. If replying to multiple points, add a blank line between each point
-6. IMPORTANT: If you don't have pricing/availability info for what they're asking, respond with EXACTLY: "ESCALATE: [brief summary of what they need]"
-7. NEVER ask the same question twice
-8. Use the AVAILABLE PRODUCTS list for pricing - if product not listed, escalate
+IMPORTANT RULES:
+1. ANSWER questions using the PRODUCT CATALOG and KNOWLEDGE BASE above
+2. If the customer asks about a product IN the catalog, give the price from catalog
+3. If the customer asks about a product NOT in catalog, say: "ESCALATE: Need pricing for [product name]"
+4. For general questions (greetings, thanks, how are you), respond normally - DO NOT escalate
+5. Keep replies short and friendly (2-3 sentences)
+6. DO NOT ask for photos, budget, or repeat questions already asked
+7. DO NOT say "let me check" - either answer from catalog/KB or escalate
 
 Customer's new message: "{message}"
 
-Your reply (if you don't know pricing/availability, start with "ESCALATE:"):"""
+Reply (use catalog/KB data if available, only say "ESCALATE: [reason]" if product is NOT in catalog):"""
 
         # Generate response
         chat = LlmChat(
@@ -764,7 +766,7 @@ Your reply (if you don't know pricing/availability, start with "ESCALATE:"):"""
             await escalate_to_owner(customer, conversation_history, message, "AI returned empty response")
             return "Let me check on that and get back to you shortly."
         
-        # CHECK FOR ESCALATION REQUEST
+        # CHECK FOR EXPLICIT ESCALATION REQUEST (only if AI explicitly says ESCALATE:)
         if response.strip().upper().startswith("ESCALATE:"):
             escalation_reason = response.replace("ESCALATE:", "").replace("escalate:", "").strip()
             logger.info(f"AI requested escalation: {escalation_reason}")
@@ -774,15 +776,6 @@ Your reply (if you don't know pricing/availability, start with "ESCALATE:"):"""
             
             # Return friendly message to customer
             return "Let me check on that for you and get back shortly! 🙏"
-        
-        # Also detect common "I don't know" patterns
-        uncertain_phrases = [
-            "let me check", "i'll get back", "i will get back", "check and get back",
-            "i don't have that information", "i'm not sure about the price"
-        ]
-        if any(phrase in response.lower() for phrase in uncertain_phrases):
-            logger.info(f"AI response indicates uncertainty, triggering escalation")
-            await escalate_to_owner(customer, conversation_history, message, "AI indicated uncertainty about pricing/availability")
         
         # Update topic if exists
         if active_topic:
