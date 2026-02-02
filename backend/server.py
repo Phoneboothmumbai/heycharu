@@ -1885,7 +1885,7 @@ async def get_unanswered_questions(status: Optional[str] = None, relevance: Opti
         query["status"] = "pending_owner_reply"  # Default: only pending
     # If status == "all", don't add status filter
     
-    if relevance:
+    if relevance and relevance != "all":
         query["relevance"] = relevance
     
     escalations = await db.escalations.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
