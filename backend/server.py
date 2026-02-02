@@ -1260,8 +1260,10 @@ async def scrape_website_to_kb(data: WebScrapeRequest, user: dict = Depends(get_
 async def upload_excel_to_kb(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
     """Upload Excel/CSV file to add multiple KB articles or products
     
-    Excel should have columns: title, category, content, tags (optional)
-    OR for products: name, description, category, sku, price, stock
+    Supports multiple formats:
+    1. KB Articles: title, content, category, tags
+    2. Products: name, price, category, description
+    3. Apple Price List: Part Number, Description, ALP Inc VAT
     """
     import pandas as pd
     import io
@@ -1292,13 +1294,27 @@ async def upload_excel_to_kb(file: UploadFile = File(...), user: dict = Depends(
         if df.empty:
             raise HTTPException(status_code=400, detail="File has no data rows")
         
-        # Convert column names to lowercase
+        # Convert column names to lowercase for easier matching
         df.columns = [str(col).lower().strip() for col in df.columns]
+        original_cols = list(df.columns)
         
-        logger.info(f"Excel upload - Columns found: {list(df.columns)}, Rows: {len(df)}")
+        logger.info(f"Excel upload - Columns found: {original_cols}, Rows: {len(df)}")
         
         now = datetime.now(timezone.utc).isoformat()
         added_count = 0
+        
+        # DETECT FORMAT: Apple Price List (Part Number, Description, ALP Inc VAT)
+        if 'part number' in df.columns and 'description' in df.columns:
+            # Map Apple columns to our product format
+            df = df.rename(columns={
+                'part number': 'sku',
+                'description': 'name',
+                'alp inc vat': 'price',
+                'sap part description': 'short_name',
+                'solutions & offerings': 'category',
+                'solutions &amp; offerings': 'category'
+            })
+            logger.info("Detected Apple Price List format")
         
         # Check if this is a KB upload or Product upload
         if 'title' in df.columns and 'content' in df.columns:
@@ -1330,28 +1346,47 @@ async def upload_excel_to_kb(file: UploadFile = File(...), user: dict = Depends(
                 "message": f"Added {added_count} KB articles"
             }
         
-        elif 'name' in df.columns and ('price' in df.columns or 'base_price' in df.columns):
-            # Products upload
+        elif 'name' in df.columns:
+            # Products upload - handle various price column names
+            price_col = None
+            for col in ['price', 'base_price', 'alp inc vat', 'alp', 'mrp', 'cost']:
+                if col in df.columns:
+                    price_col = col
+                    break
+            
             for _, row in df.iterrows():
                 name = str(row.get('name', '')).strip() if pd.notna(row.get('name')) else ''
-                if not name:
+                if not name or name.lower() == 'nan':
                     continue
                 
-                price = row.get('price') if pd.notna(row.get('price')) else row.get('base_price') if pd.notna(row.get('base_price')) else 0
-                try:
-                    price = float(price)
-                except:
-                    price = 0
+                # Get price
+                price = 0
+                if price_col and pd.notna(row.get(price_col)):
+                    try:
+                        price_val = str(row.get(price_col)).replace(',', '').replace('₹', '').replace('$', '').strip()
+                        price = float(price_val) if price_val and price_val != 'nan' else 0
+                    except:
+                        price = 0
+                
+                # Get category
+                category = 'general'
+                if pd.notna(row.get('category')):
+                    category = str(row.get('category')).strip()
+                elif pd.notna(row.get('solutions & offerings')):
+                    category = str(row.get('solutions & offerings')).strip()
+                
+                if not category or category.lower() == 'nan':
+                    category = 'general'
                 
                 product = {
                     "id": str(uuid.uuid4()),
-                    "name": name,
+                    "name": name[:200],
                     "description": str(row.get('description', '')).strip() if pd.notna(row.get('description')) else '',
-                    "category": str(row.get('category', 'general')).strip() if pd.notna(row.get('category')) else 'general',
+                    "category": category,
                     "sku": str(row.get('sku', str(uuid.uuid4())[:8])).strip() if pd.notna(row.get('sku')) else str(uuid.uuid4())[:8],
                     "base_price": price,
-                    "tax_rate": float(row.get('tax_rate', 18)) if pd.notna(row.get('tax_rate')) else 18,
-                    "final_price": price * 1.18,
+                    "tax_rate": 18,
+                    "final_price": price * 1.18 if price > 0 else 0,
                     "stock": int(row.get('stock', 0)) if pd.notna(row.get('stock')) else 0,
                     "images": [],
                     "specifications": {},
@@ -1369,10 +1404,10 @@ async def upload_excel_to_kb(file: UploadFile = File(...), user: dict = Depends(
             }
         
         else:
-            available_cols = ', '.join(df.columns.tolist())
+            available_cols = ', '.join(original_cols[:10])
             raise HTTPException(
                 status_code=400, 
-                detail=f"Excel must have columns: [title, content] for KB or [name, price] for products. Found columns: {available_cols}"
+                detail=f"Excel must have columns: [title, content] for KB or [name, price] for products. Found: {available_cols}"
             )
         
     except HTTPException:
