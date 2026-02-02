@@ -17,6 +17,7 @@ import LeadsPage from "./pages/LeadsPage";
 import ExcludedNumbersPage from "./pages/ExcludedNumbersPage";
 import AutoMessagesPage from "./pages/AutoMessagesPage";
 import KnowledgeBasePage from "./pages/KnowledgeBasePage";
+import UnansweredQuestionsPage from "./pages/UnansweredQuestionsPage";
 
 // Layout
 import AppLayout from "./components/layout/AppLayout";
