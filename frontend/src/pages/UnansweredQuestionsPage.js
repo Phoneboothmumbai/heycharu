@@ -252,7 +252,7 @@ const UnansweredQuestionsPage = () => {
         <Card>
           <CardContent className="pt-6">
             <div className="text-3xl font-bold text-orange-500">
-              {questions.filter(q => q.status === "pending_owner_reply").length}
+              {stats.pending}
             </div>
             <p className="text-sm text-muted-foreground">Pending</p>
           </CardContent>
@@ -260,7 +260,7 @@ const UnansweredQuestionsPage = () => {
         <Card>
           <CardContent className="pt-6">
             <div className="text-3xl font-bold text-red-500">
-              {questions.filter(q => q.is_overdue).length}
+              {stats.overdue}
             </div>
             <p className="text-sm text-muted-foreground">Overdue</p>
           </CardContent>
@@ -268,7 +268,7 @@ const UnansweredQuestionsPage = () => {
         <Card>
           <CardContent className="pt-6">
             <div className="text-3xl font-bold text-green-500">
-              {questions.filter(q => q.status === "resolved").length}
+              {stats.resolved}
             </div>
             <p className="text-sm text-muted-foreground">Resolved</p>
           </CardContent>
@@ -276,7 +276,7 @@ const UnansweredQuestionsPage = () => {
         <Card>
           <CardContent className="pt-6">
             <div className="text-3xl font-bold text-gray-500">
-              {questions.filter(q => q.relevance === "irrelevant").length}
+              {stats.irrelevant}
             </div>
             <p className="text-sm text-muted-foreground">Irrelevant</p>
           </CardContent>
