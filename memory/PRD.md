@@ -126,6 +126,55 @@ Complete AI conversation control with strict decision logic:
 ### Auto-Messaging System
 Trigger-based, permission-controlled automated messages with full anti-spam controls.
 
+### AI Behavior Policy Engine (NEW - Feb 2026)
+Configurable AI rules system - define all AI behavior via UI without code changes.
+
+**Features:**
+- ✅ Master toggle to enable/disable policy enforcement
+- ✅ Global Rules: Allowed topics, disallowed behaviors, scope message
+- ✅ Conversation States: GREETING, INTENT_COLLECTION, ACTION, CLOSURE, ESCALATION
+- ✅ Response Constraints: Greeting limit, question limit, max length, tone, language
+- ✅ Fallback Rules: Unclear data, out-of-scope, system error handling
+- ✅ System Triggers: Lead inject configuration
+- ✅ Save Policy and Reset to Defaults functionality
+
+**API Endpoints:**
+- `GET /api/ai-policy` - Get current policy configuration
+- `PUT /api/ai-policy` - Update entire policy
+- `PUT /api/ai-policy/section/{section}` - Update specific section
+- `PUT /api/ai-policy/state/{state_name}` - Update specific state
+- `POST /api/ai-policy/reset` - Reset to default policy
+
+**Policy Structure:**
+```json
+{
+  "enabled": true,
+  "global_rules": {
+    "allowed_topics": ["apple_products", "apple_repairs", "it_products", "it_services"],
+    "disallowed_behavior": ["off_topic_replies", "competitor_comparison", "guessing_prices"],
+    "scope_message": "I can help with Apple products, repairs, and IT services."
+  },
+  "states": {
+    "GREETING": { "enabled": true, "triggers": ["hi", "hello"], "response_template": "Hi! How can I help?" },
+    "INTENT_COLLECTION": { "enabled": true, "triggers": ["need", "want", "looking"] },
+    "ACTION": { "enabled": true, "sales_flow": {...}, "repair_flow": {...} },
+    "CLOSURE": { "enabled": true, "triggers": ["thanks", "bye"], "templates": {...} },
+    "ESCALATION": { "enabled": true, "placeholder_message": "Let me check...", "notify_owner": true }
+  },
+  "response_rules": {
+    "greeting_limit": "once_per_conversation",
+    "question_limit": "one_at_a_time",
+    "max_response_length": 150,
+    "tone": "friendly_professional"
+  },
+  "fallback": {
+    "unclear_data": { "action": "ask_for_clarification", "template": "..." },
+    "out_of_scope": { "action": "polite_refusal", "template": "..." },
+    "system_error": { "action": "escalate_to_human", "template": "..." }
+  }
+}
+```
+
 **Implemented Triggers:**
 1. ✅ **Order Confirmed** - Sent when order is placed
 2. ✅ **Payment Received** - Sent when payment marked as received
