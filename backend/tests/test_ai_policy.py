@@ -262,7 +262,7 @@ class TestAIPolicyAPI:
         reset_policy = verify_response.json()
         
         # Check that enabled is True (default)
-        assert reset_policy["enabled"] == True, "enabled should be True after reset"
+        assert reset_policy["enabled"] is True, "enabled should be True after reset"
         
         # Check that default topics are restored
         default_topics = ["apple_products", "apple_repairs", "it_products", "it_services"]
@@ -342,7 +342,7 @@ class TestAIPolicyAPI:
         """PUT /api/ai-policy/state/greeting should work (case insensitive)"""
         new_state = {"enabled": True, "triggers": ["hi"]}
         response = self.session.put(f"{BASE_URL}/api/ai-policy/state/greeting", json=new_state)
-        assert response.status_code == 200, f"State update should be case insensitive"
+        assert response.status_code == 200, "State update should be case insensitive"
         
         # Reset
         self.session.post(f"{BASE_URL}/api/ai-policy/reset")
