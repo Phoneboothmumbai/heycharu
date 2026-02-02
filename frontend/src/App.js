@@ -18,6 +18,7 @@ import ExcludedNumbersPage from "./pages/ExcludedNumbersPage";
 import AutoMessagesPage from "./pages/AutoMessagesPage";
 import KnowledgeBasePage from "./pages/KnowledgeBasePage";
 import UnansweredQuestionsPage from "./pages/UnansweredQuestionsPage";
+import AIBehaviorPolicyPage from "./pages/AIBehaviorPolicyPage";
 
 // Layout
 import AppLayout from "./components/layout/AppLayout";
@@ -75,6 +76,7 @@ function App() {
                       <Route path="/auto-messages" element={<AutoMessagesPage />} />
                       <Route path="/knowledge-base" element={<KnowledgeBasePage />} />
                       <Route path="/unanswered-questions" element={<UnansweredQuestionsPage />} />
+                      <Route path="/ai-policy" element={<AIBehaviorPolicyPage />} />
                       <Route path="/settings" element={<SettingsPage />} />
                     </Routes>
                   </AppLayout>
