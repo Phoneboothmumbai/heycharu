@@ -137,6 +137,18 @@ Configurable AI rules system - define all AI behavior via UI without code change
 - ✅ Fallback Rules: Unclear data, out-of-scope, system error handling
 - ✅ System Triggers: Lead inject configuration
 - ✅ Save Policy and Reset to Defaults functionality
+- ✅ **Policy Scan on Every Message:** AI loads and checks ALL parameters before generating any reply
+
+**How Policy Scanning Works:**
+Before EVERY customer message reply, the AI:
+1. Loads the complete policy from database
+2. Extracts all allowed topics, disallowed behaviors
+3. Loads all state configurations (triggers, templates, forbidden actions)
+4. Applies response constraints (max length, tone, language, emoji usage)
+5. Checks fallback rules for edge cases
+6. Logs: "AI Policy Scan - Enabled: X, Topics: Y, States: Z, Response Rules: W"
+7. Builds dynamic prompt incorporating ALL policy parameters
+8. Generates response following the policy strictly
 
 **API Endpoints:**
 - `GET /api/ai-policy` - Get current policy configuration
