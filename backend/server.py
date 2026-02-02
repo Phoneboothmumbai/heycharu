@@ -2596,7 +2596,7 @@ async def get_customer_360(customer_id: str, user: dict = Depends(get_current_us
 
 @api_router.put("/customers/{customer_id}/notes")
 async def update_customer_notes(customer_id: str, notes: str, user: dict = Depends(get_current_user)):
-    """Update customer internal notes"""
+    """Update customer internal notes (legacy single note)"""
     result = await db.customers.update_one(
         {"id": customer_id},
         {"$set": {"notes": notes, "last_interaction": datetime.now(timezone.utc).isoformat()}}
@@ -2604,6 +2604,171 @@ async def update_customer_notes(customer_id: str, notes: str, user: dict = Depen
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Customer not found")
     return {"message": "Notes updated"}
+
+@api_router.post("/customers/{customer_id}/notes")
+async def add_customer_note(customer_id: str, content: str, user: dict = Depends(get_current_user)):
+    """Add a new note to customer notes history"""
+    note = {
+        "id": str(uuid.uuid4()),
+        "content": content,
+        "created_by": user.get("name", "Admin"),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    result = await db.customers.update_one(
+        {"id": customer_id},
+        {
+            "$push": {"notes_history": note},
+            "$set": {"last_interaction": datetime.now(timezone.utc).isoformat()}
+        }
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return {"message": "Note added", "note": note}
+
+@api_router.delete("/customers/{customer_id}/notes/{note_id}")
+async def delete_customer_note(customer_id: str, note_id: str, user: dict = Depends(get_current_user)):
+    """Delete a note from customer notes history"""
+    result = await db.customers.update_one(
+        {"id": customer_id},
+        {"$pull": {"notes_history": {"id": note_id}}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return {"message": "Note deleted"}
+
+@api_router.put("/customers/{customer_id}/details")
+async def update_customer_details(customer_id: str, data: Dict[str, Any], user: dict = Depends(get_current_user)):
+    """Update customer details (name, email, phone, company, type, payment preferences)"""
+    allowed_fields = ["name", "email", "phone", "company_id", "customer_type", "payment_preferences"]
+    update_data = {k: v for k, v in data.items() if k in allowed_fields}
+    update_data["last_interaction"] = datetime.now(timezone.utc).isoformat()
+    
+    result = await db.customers.update_one(
+        {"id": customer_id},
+        {"$set": update_data}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return {"message": "Customer details updated"}
+
+@api_router.post("/customers/{customer_id}/addresses")
+async def add_customer_address(customer_id: str, address: Dict[str, Any], user: dict = Depends(get_current_user)):
+    """Add a new address to customer"""
+    address["id"] = str(uuid.uuid4())
+    address["created_at"] = datetime.now(timezone.utc).isoformat()
+    
+    result = await db.customers.update_one(
+        {"id": customer_id},
+        {"$push": {"addresses": address}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return {"message": "Address added", "address": address}
+
+@api_router.put("/customers/{customer_id}/addresses/{address_id}")
+async def update_customer_address(customer_id: str, address_id: str, address: Dict[str, Any], user: dict = Depends(get_current_user)):
+    """Update a customer address"""
+    result = await db.customers.update_one(
+        {"id": customer_id, "addresses.id": address_id},
+        {"$set": {"addresses.$": {**address, "id": address_id, "updated_at": datetime.now(timezone.utc).isoformat()}}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Customer or address not found")
+    return {"message": "Address updated"}
+
+@api_router.delete("/customers/{customer_id}/addresses/{address_id}")
+async def delete_customer_address(customer_id: str, address_id: str, user: dict = Depends(get_current_user)):
+    """Delete a customer address"""
+    result = await db.customers.update_one(
+        {"id": customer_id},
+        {"$pull": {"addresses": {"id": address_id}}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return {"message": "Address deleted"}
+
+@api_router.post("/customers/{customer_id}/invoices")
+async def upload_customer_invoice(customer_id: str, file: UploadFile, description: str = "", user: dict = Depends(get_current_user)):
+    """Upload an invoice file for customer"""
+    import base64
+    
+    # Read file content
+    content = await file.read()
+    
+    # Store as base64 (for small files) or save to disk
+    invoice = {
+        "id": str(uuid.uuid4()),
+        "filename": file.filename,
+        "content_type": file.content_type,
+        "size": len(content),
+        "description": description,
+        "data": base64.b64encode(content).decode('utf-8'),  # Store as base64
+        "uploaded_by": user.get("name", "Admin"),
+        "uploaded_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    result = await db.customers.update_one(
+        {"id": customer_id},
+        {"$push": {"invoices": invoice}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    return {"message": "Invoice uploaded", "invoice_id": invoice["id"], "filename": invoice["filename"]}
+
+@api_router.get("/customers/{customer_id}/invoices/{invoice_id}")
+async def get_customer_invoice(customer_id: str, invoice_id: str, user: dict = Depends(get_current_user)):
+    """Get a specific invoice file"""
+    import base64
+    from fastapi.responses import Response
+    
+    customer = await db.customers.find_one({"id": customer_id}, {"_id": 0, "invoices": 1})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    invoices = customer.get("invoices", [])
+    invoice = next((i for i in invoices if i.get("id") == invoice_id), None)
+    
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    content = base64.b64decode(invoice["data"])
+    return Response(
+        content=content,
+        media_type=invoice.get("content_type", "application/octet-stream"),
+        headers={"Content-Disposition": f"attachment; filename={invoice['filename']}"}
+    )
+
+@api_router.delete("/customers/{customer_id}/invoices/{invoice_id}")
+async def delete_customer_invoice(customer_id: str, invoice_id: str, user: dict = Depends(get_current_user)):
+    """Delete an invoice"""
+    result = await db.customers.update_one(
+        {"id": customer_id},
+        {"$pull": {"invoices": {"id": invoice_id}}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return {"message": "Invoice deleted"}
+
+@api_router.get("/customers/{customer_id}/ai-insights")
+async def get_customer_ai_insights(customer_id: str, user: dict = Depends(get_current_user)):
+    """Get AI-collected insights about customer"""
+    customer = await db.customers.find_one({"id": customer_id}, {"_id": 0, "ai_insights": 1, "name": 1})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return customer.get("ai_insights", {})
+
+@api_router.put("/customers/{customer_id}/ai-insights")
+async def update_customer_ai_insights(customer_id: str, insights: Dict[str, Any], user: dict = Depends(get_current_user)):
+    """Manually update AI insights (or called by AI)"""
+    result = await db.customers.update_one(
+        {"id": customer_id},
+        {"$set": {"ai_insights": insights}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return {"message": "AI insights updated"}
 
 @api_router.put("/customers/{customer_id}/tags")
 async def update_customer_tags(customer_id: str, tags: List[str], user: dict = Depends(get_current_user)):
