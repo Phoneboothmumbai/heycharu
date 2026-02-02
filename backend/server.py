@@ -1258,7 +1258,7 @@ async def scrape_website_to_kb(data: WebScrapeRequest, user: dict = Depends(get_
 
 @api_router.post("/kb/upload-excel")
 async def upload_excel_to_kb(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
-    """Upload Excel file to add multiple KB articles or products
+    """Upload Excel/CSV file to add multiple KB articles or products
     
     Excel should have columns: title, category, content, tags (optional)
     OR for products: name, description, category, sku, price, stock
@@ -1266,15 +1266,36 @@ async def upload_excel_to_kb(file: UploadFile = File(...), user: dict = Depends(
     import pandas as pd
     import io
     
-    if not file.filename.endswith(('.xlsx', '.xls')):
-        raise HTTPException(status_code=400, detail="Only Excel files (.xlsx, .xls) are allowed")
+    filename = file.filename.lower()
+    if not filename.endswith(('.xlsx', '.xls', '.csv')):
+        raise HTTPException(status_code=400, detail="Only Excel (.xlsx, .xls) or CSV (.csv) files are allowed")
     
     try:
         contents = await file.read()
-        df = pd.read_excel(io.BytesIO(contents))
+        
+        if not contents or len(contents) < 10:
+            raise HTTPException(status_code=400, detail="File is empty or too small")
+        
+        # Try to read the file
+        try:
+            if filename.endswith('.csv'):
+                df = pd.read_csv(io.BytesIO(contents))
+            else:
+                # Try with openpyxl engine first, then xlrd
+                try:
+                    df = pd.read_excel(io.BytesIO(contents), engine='openpyxl')
+                except Exception:
+                    df = pd.read_excel(io.BytesIO(contents))
+        except Exception as read_error:
+            raise HTTPException(status_code=400, detail=f"Cannot read file: {str(read_error)}. Make sure it's a valid Excel/CSV file.")
+        
+        if df.empty:
+            raise HTTPException(status_code=400, detail="File has no data rows")
         
         # Convert column names to lowercase
-        df.columns = [col.lower().strip() for col in df.columns]
+        df.columns = [str(col).lower().strip() for col in df.columns]
+        
+        logger.info(f"Excel upload - Columns found: {list(df.columns)}, Rows: {len(df)}")
         
         now = datetime.now(timezone.utc).isoformat()
         added_count = 0
@@ -1283,19 +1304,24 @@ async def upload_excel_to_kb(file: UploadFile = File(...), user: dict = Depends(
         if 'title' in df.columns and 'content' in df.columns:
             # KB Articles upload
             for _, row in df.iterrows():
+                title = str(row.get('title', '')).strip() if pd.notna(row.get('title')) else ''
+                content = str(row.get('content', '')).strip() if pd.notna(row.get('content')) else ''
+                
+                if not title or not content:
+                    continue
+                
                 article = {
                     "id": str(uuid.uuid4()),
-                    "title": str(row.get('title', '')).strip(),
-                    "category": str(row.get('category', 'general')).strip().lower(),
-                    "content": str(row.get('content', '')).strip(),
-                    "tags": str(row.get('tags', '')).split(',') if pd.notna(row.get('tags')) else [],
+                    "title": title[:200],
+                    "category": str(row.get('category', 'general')).strip().lower() if pd.notna(row.get('category')) else 'general',
+                    "content": content,
+                    "tags": [t.strip() for t in str(row.get('tags', '')).split(',') if t.strip()] if pd.notna(row.get('tags')) else [],
                     "is_active": True,
                     "created_at": now,
                     "updated_at": now
                 }
-                if article['title'] and article['content']:
-                    await db.knowledge_base.insert_one(article)
-                    added_count += 1
+                await db.knowledge_base.insert_one(article)
+                added_count += 1
             
             return {
                 "success": True,
@@ -1307,25 +1333,33 @@ async def upload_excel_to_kb(file: UploadFile = File(...), user: dict = Depends(
         elif 'name' in df.columns and ('price' in df.columns or 'base_price' in df.columns):
             # Products upload
             for _, row in df.iterrows():
-                price = row.get('price') or row.get('base_price') or 0
+                name = str(row.get('name', '')).strip() if pd.notna(row.get('name')) else ''
+                if not name:
+                    continue
+                
+                price = row.get('price') if pd.notna(row.get('price')) else row.get('base_price') if pd.notna(row.get('base_price')) else 0
+                try:
+                    price = float(price)
+                except:
+                    price = 0
+                
                 product = {
                     "id": str(uuid.uuid4()),
-                    "name": str(row.get('name', '')).strip(),
-                    "description": str(row.get('description', '')).strip(),
-                    "category": str(row.get('category', 'general')).strip(),
-                    "sku": str(row.get('sku', str(uuid.uuid4())[:8])).strip(),
-                    "base_price": float(price) if pd.notna(price) else 0,
+                    "name": name,
+                    "description": str(row.get('description', '')).strip() if pd.notna(row.get('description')) else '',
+                    "category": str(row.get('category', 'general')).strip() if pd.notna(row.get('category')) else 'general',
+                    "sku": str(row.get('sku', str(uuid.uuid4())[:8])).strip() if pd.notna(row.get('sku')) else str(uuid.uuid4())[:8],
+                    "base_price": price,
                     "tax_rate": float(row.get('tax_rate', 18)) if pd.notna(row.get('tax_rate')) else 18,
-                    "final_price": float(price) * 1.18 if pd.notna(price) else 0,
+                    "final_price": price * 1.18,
                     "stock": int(row.get('stock', 0)) if pd.notna(row.get('stock')) else 0,
                     "images": [],
                     "specifications": {},
                     "is_active": True,
                     "created_at": now
                 }
-                if product['name']:
-                    await db.products.insert_one(product)
-                    added_count += 1
+                await db.products.insert_one(product)
+                added_count += 1
             
             return {
                 "success": True,
@@ -1335,14 +1369,16 @@ async def upload_excel_to_kb(file: UploadFile = File(...), user: dict = Depends(
             }
         
         else:
+            available_cols = ', '.join(df.columns.tolist())
             raise HTTPException(
                 status_code=400, 
-                detail="Excel must have columns: [title, content, category] for KB or [name, price, category] for products"
+                detail=f"Excel must have columns: [title, content] for KB or [name, price] for products. Found columns: {available_cols}"
             )
         
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Excel upload error: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to process Excel: {str(e)}")
 
 # ============== ESCALATIONS ROUTES ==============
