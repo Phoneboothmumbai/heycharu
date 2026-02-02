@@ -1773,11 +1773,11 @@ async def scrape_website_to_kb(data: WebScrapeRequest, user: dict = Depends(get_
 
 @api_router.post("/kb/upload-excel")
 async def upload_excel_to_kb(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
-    """Upload Excel/CSV file to Knowledge Base as plain text
+    """Upload Excel/CSV file to Knowledge Base as ONE plain text article
     
-    - ALL data goes to KB (never products)
-    - Stored as plain text for easy reading by AI and humans
-    - Each row becomes a KB article
+    - Entire Excel becomes 1 KB article
+    - All rows combined into plain text
+    - Easy to read, edit, delete, replace
     """
     import pandas as pd
     import io
@@ -1818,50 +1818,49 @@ async def upload_excel_to_kb(file: UploadFile = File(...), user: dict = Depends(
         
         now = datetime.now(timezone.utc).isoformat()
         
-        # Delete existing KB articles from this file (if re-uploading)
+        # Delete existing KB article from this file (if re-uploading)
         await db.knowledge_base.delete_many({"source_file": original_filename})
         
-        # Convert ALL rows to plain text KB articles
-        added_count = 0
+        # Build ONE plain text content from ALL rows
+        all_content = []
+        all_content.append(f"=== {original_filename} ===\n")
+        all_content.append(f"Columns: {', '.join(columns)}\n")
+        all_content.append("=" * 50 + "\n\n")
         
         for idx, row in df.iterrows():
-            # Build plain text content from all columns
-            content_lines = []
+            row_lines = []
             for col in columns:
                 val = row.get(col)
                 if pd.notna(val) and str(val).strip() and str(val).lower() != 'nan':
-                    content_lines.append(f"{col}: {str(val).strip()}")
+                    row_lines.append(f"{col}: {str(val).strip()}")
             
-            if not content_lines:
-                continue
-            
-            # Use first column value as title, or row number
-            first_val = str(row.get(columns[0], '')).strip() if pd.notna(row.get(columns[0])) else ''
-            title = first_val[:100] if first_val and first_val.lower() != 'nan' else f"Row {idx + 1}"
-            
-            # Plain text content
-            content = "\n".join(content_lines)
-            
-            article = {
-                "id": str(uuid.uuid4()),
-                "title": title,
-                "category": "excel-data",
-                "content": content,
-                "tags": ["excel", original_filename.replace('.xlsx', '').replace('.xls', '').replace('.csv', '')],
-                "source_file": original_filename,
-                "row_number": idx + 1,
-                "is_active": True,
-                "created_at": now,
-                "updated_at": now
-            }
-            await db.knowledge_base.insert_one(article)
-            added_count += 1
+            if row_lines:
+                all_content.append("\n".join(row_lines))
+                all_content.append("\n---\n")
+        
+        # Create ONE KB article for entire file
+        title = original_filename.replace('.xlsx', '').replace('.xls', '').replace('.csv', '').replace('_', ' ').replace('-', ' ').title()
+        
+        article = {
+            "id": str(uuid.uuid4()),
+            "title": title,
+            "category": "excel-data",
+            "content": "\n".join(all_content),
+            "tags": ["excel", "price-list", "data"],
+            "source_file": original_filename,
+            "row_count": len(df),
+            "is_active": True,
+            "created_at": now,
+            "updated_at": now
+        }
+        await db.knowledge_base.insert_one(article)
         
         return {
             "success": True,
             "type": "knowledge_base",
-            "added": added_count,
-            "message": f"Added {added_count} KB articles from {original_filename}",
+            "added": 1,
+            "rows_in_file": len(df),
+            "message": f"Created 1 KB article from {original_filename} ({len(df)} rows)",
             "source_file": original_filename
         }
         
