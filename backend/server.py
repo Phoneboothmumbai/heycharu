@@ -1638,6 +1638,146 @@ async def update_escalation_status(escalation_id: str, status: str, user: dict =
         raise HTTPException(status_code=404, detail="Escalation not found")
     return {"message": "Status updated"}
 
+# ============== SLA TIMER & REMINDERS ==============
+
+@api_router.post("/escalations/check-sla")
+async def check_sla_and_send_reminders(user: dict = Depends(get_current_user)):
+    """Check pending escalations and send reminders for those past SLA deadline.
+    This endpoint can be called periodically (e.g., every 5-10 mins) or on-demand.
+    
+    Sends reminders to owner via WhatsApp + updates dashboard status.
+    """
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+    
+    # Find all pending escalations
+    pending = await db.escalations.find(
+        {"status": "pending_owner_reply"},
+        {"_id": 0}
+    ).to_list(100)
+    
+    # Get owner phone
+    settings = await db.settings.find_one({"type": "global"}, {"_id": 0})
+    owner_phone = settings.get("owner_phone", "") if settings else ""
+    
+    reminders_sent = []
+    overdue_count = 0
+    
+    for esc in pending:
+        sla_deadline = esc.get("sla_deadline")
+        if not sla_deadline:
+            continue
+        
+        # Check if past SLA deadline
+        try:
+            deadline_dt = datetime.fromisoformat(sla_deadline.replace('Z', '+00:00'))
+            if now > deadline_dt:
+                overdue_count += 1
+                reminders_count = esc.get("sla_reminders_sent", 0)
+                
+                # Send reminder if less than 3 reminders sent and at least 10 mins since last
+                if reminders_count < 3:
+                    customer_name = esc.get("customer_name", "Unknown")
+                    customer_message = esc.get("customer_message", "")[:100]
+                    time_overdue = int((now - deadline_dt).total_seconds() / 60)
+                    
+                    reminder_msg = f"""⏰ *SLA REMINDER #{reminders_count + 1}*
+
+Customer *{customer_name}* is waiting!
+
+❓ Their question:
+"{customer_message}"
+
+⏱️ Overdue by: {time_overdue} minutes
+
+Just reply with your answer - I'll format and send it."""
+
+                    # Send WhatsApp reminder to owner
+                    if owner_phone:
+                        await send_whatsapp_message(owner_phone, reminder_msg)
+                    
+                    # Update escalation
+                    await db.escalations.update_one(
+                        {"id": esc["id"]},
+                        {"$set": {
+                            "sla_reminders_sent": reminders_count + 1,
+                            "last_reminder_at": now_iso
+                        }}
+                    )
+                    
+                    # Update conversation status
+                    if esc.get("customer_id"):
+                        await db.conversations.update_one(
+                            {"customer_id": esc["customer_id"]},
+                            {"$set": {
+                                "sla_reminders_sent": reminders_count + 1,
+                                "status": "waiting_for_owner"
+                            }}
+                        )
+                    
+                    reminders_sent.append({
+                        "escalation_id": esc["id"],
+                        "customer_name": customer_name,
+                        "time_overdue_mins": time_overdue
+                    })
+                    
+                    logger.info(f"SLA reminder sent for {customer_name} - Overdue by {time_overdue} mins")
+        except Exception as e:
+            logger.error(f"Error processing SLA for escalation {esc.get('id')}: {e}")
+            continue
+    
+    return {
+        "checked_at": now_iso,
+        "total_pending": len(pending),
+        "overdue_count": overdue_count,
+        "reminders_sent": reminders_sent
+    }
+
+@api_router.get("/escalations/pending-sla")
+async def get_pending_sla_escalations(user: dict = Depends(get_current_user)):
+    """Get all pending escalations with their SLA status for dashboard display"""
+    now = datetime.now(timezone.utc)
+    
+    pending = await db.escalations.find(
+        {"status": "pending_owner_reply"},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(50)
+    
+    result = []
+    for esc in pending:
+        sla_deadline = esc.get("sla_deadline")
+        is_overdue = False
+        minutes_remaining = None
+        minutes_overdue = None
+        
+        if sla_deadline:
+            try:
+                deadline_dt = datetime.fromisoformat(sla_deadline.replace('Z', '+00:00'))
+                if now > deadline_dt:
+                    is_overdue = True
+                    minutes_overdue = int((now - deadline_dt).total_seconds() / 60)
+                else:
+                    minutes_remaining = int((deadline_dt - now).total_seconds() / 60)
+            except:
+                pass
+        
+        result.append({
+            "id": esc.get("id"),
+            "customer_id": esc.get("customer_id"),
+            "customer_name": esc.get("customer_name"),
+            "customer_phone": esc.get("customer_phone"),
+            "customer_message": esc.get("customer_message"),
+            "reason": esc.get("reason"),
+            "created_at": esc.get("created_at"),
+            "sla_deadline": sla_deadline,
+            "sla_reminders_sent": esc.get("sla_reminders_sent", 0),
+            "is_overdue": is_overdue,
+            "minutes_remaining": minutes_remaining,
+            "minutes_overdue": minutes_overdue
+        })
+    
+    return result
+
 # ============== EXCLUDED NUMBERS ROUTES (Silent Monitoring) ==============
 
 @api_router.get("/excluded-numbers", response_model=List[ExcludedNumberResponse])
