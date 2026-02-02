@@ -804,9 +804,34 @@ Devices: {', '.join([d.get('model', '') for d in customer.get('devices', [])[:3]
         has_products = len(products) > 0
         source_verified = has_kb or has_products
         
+        # ========== PRE-CHECK: Simple conversational messages ==========
+        # These don't need escalation - AI can handle them directly
+        simple_message = message.strip().lower()
+        simple_greetings = ["hi", "hello", "hey", "good morning", "good afternoon", "good evening", "thanks", "thank you", "ok", "okay", "yes", "no", "bye", "goodbye"]
+        is_simple_greeting = simple_message in simple_greetings or len(simple_message) < 4
+        
+        # Check for pending escalation for this customer
+        pending_escalation = await db.escalations.find_one(
+            {"customer_id": customer_id, "status": "pending_owner_reply"},
+            {"_id": 0}
+        )
+        
         # ========== STEP 3: DECISION LOGIC ==========
+        # Build context about pending escalation if any
+        pending_context = ""
+        if pending_escalation:
+            pending_context = f"""
+=== PENDING ESCALATION ===
+There is already a pending question waiting for owner response:
+- Code: {pending_escalation.get('escalation_code', 'N/A')}
+- Question: "{pending_escalation.get('customer_message', '')[:100]}"
+- Status: Waiting for owner to respond
+
+If customer asks follow-up about this, acknowledge that you're still waiting for the answer.
+Do NOT create another escalation for the same topic.
+"""
+        
         system_prompt = f"""ROLE: Customer Support Assistant for {business_name}
-STRICT MODE: You can ONLY use verified sources. NO guessing.
 
 {f"BUSINESS RULES:{chr(10)}{ai_instructions}" if ai_instructions else ""}
 
@@ -815,7 +840,7 @@ STRICT MODE: You can ONLY use verified sources. NO guessing.
 
 === CONVERSATION HISTORY ===
 {conversation_history}
-
+{pending_context}
 === VERIFIED SOURCES ===
 
 KNOWLEDGE BASE:
@@ -824,38 +849,36 @@ KNOWLEDGE BASE:
 PRODUCT CATALOG:
 {product_catalog if product_catalog else "[EMPTY - No products]"}
 
-=== STRICT DECISION TREE ===
+=== RESPONSE RULES ===
 
-STEP 1: Search for answer in KB and Product Catalog above
-STEP 2: Make decision:
-
-✅ IF answer FOUND in sources above:
+1. **Greetings/Simple Messages**: For "Hi", "Hello", "Thanks", "Yes", "Ok", "Bye" etc:
+   → Respond naturally and conversationally
+   → Do NOT escalate greetings
+   
+2. **If answer FOUND in KB or Product Catalog**:
    → Reply with EXACT information from sources
    → Use EXACT prices from catalog
    → Be professional and concise (2-3 sentences)
 
-❌ IF answer NOT FOUND in sources:
+3. **If answer NOT FOUND AND it's a product/pricing question**:
    → Reply ONLY: "ESCALATE_REQUIRED"
-   → Do NOT guess or assume
-   → Do NOT give partial answers
+   → Do NOT guess prices or availability
 
-=== FORBIDDEN RESPONSES (BLOCKED) ===
-❌ "I think..."
-❌ "Usually..."
-❌ "Estimated..."
-❌ "Most likely..."
-❌ "Based on experience..."
-❌ "You can consider..."
-❌ "I don't have that information" (use ESCALATE_REQUIRED instead)
-❌ "Let me check" (use ESCALATE_REQUIRED instead)
+4. **If there's a PENDING ESCALATION**:
+   → Acknowledge customer is waiting: "I'm still checking on that for you. I'll have an answer shortly."
+   → Do NOT create duplicate escalation
 
-=== SCOPE LIMIT ===
+=== FORBIDDEN RESPONSES ===
+❌ "I think..." / "Usually..." / "Estimated..." / "Probably..."
+❌ Don't guess prices or availability
+
+=== SCOPE ===
 Only answer about: Apple products, repairs, IT products, IT services
 For anything else: "I can help only with Apple products, repairs, and IT products or services."
 
 Customer's message: "{message}"
 
-Your response (use sources OR say "ESCALATE_REQUIRED"):"""
+Your response:""""""
 
         # Generate response
         chat = LlmChat(
