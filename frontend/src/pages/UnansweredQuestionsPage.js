@@ -105,7 +105,7 @@ const UnansweredQuestionsPage = () => {
 
   const handleLinkKbArticle = async (kbArticleId) => {
     try {
-      const token = localStorage.getItem("auth_token");
+      const token = localStorage.getItem("sales-brain-token");
       await axios.post(
         `${API_URL}/api/unanswered-questions/${selectedQuestion.id}/link-kb-article/${kbArticleId}`,
         {},
