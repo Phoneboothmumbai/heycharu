@@ -1120,7 +1120,7 @@ DEFAULT_TEMPLATES = {
     "partial_conversation": "Sharing a quick reminder — I was waiting for your response on {topic}.",
     "price_shared": "Let me know if you'd like me to proceed or need any clarification on the pricing.",
     "order_confirmed": "Thanks for confirming your order! I'm sharing the payment details below. Total: ₹{amount}",
-    "payment_received": "Payment received ✓ We'll update you once the order is processed.",
+    "payment_received": "Payment received [OK] We'll update you once the order is processed.",
     "order_completed": "Your order has been completed. Let us know if you need anything else!",
     "ticket_created": "We've created a support ticket for this. Ticket ID: #{ticket_id}",
     "ticket_updated": "Quick update — your ticket #{ticket_id} is now being worked on.",
@@ -1808,14 +1808,14 @@ async def check_sla_and_send_reminders(user: dict = Depends(get_current_user)):
                     customer_message = esc.get("customer_message", "")[:100]
                     time_overdue = int((now - deadline_dt).total_seconds() / 60)
                     
-                    reminder_msg = f"""⏰ *SLA REMINDER #{reminders_count + 1}*
+                    reminder_msg = f"""[REMINDER] *SLA REMINDER #{reminders_count + 1}*
 
 Customer *{customer_name}* is waiting!
 
-❓ Their question:
+Q: Their question:
 "{customer_message}"
 
-⏱️ Overdue by: {time_overdue} minutes
+Time Overdue by: {time_overdue} minutes
 
 Just reply with your answer - I'll format and send it."""
 
@@ -3451,7 +3451,7 @@ async def handle_incoming_whatsapp(data: WhatsAppIncoming):
                 
                 if not target_escalation:
                     # Code not found or already resolved
-                    await send_whatsapp_message(phone, f"⚠️ Escalation {escalation_code} not found or already resolved.\n\nPending escalations:")
+                    await send_whatsapp_message(phone, f"[WARNING] Escalation {escalation_code} not found or already resolved.\n\nPending escalations:")
                     
                     # List pending escalations
                     pending_list = await db.escalations.find(
@@ -3568,7 +3568,7 @@ Write the polished reply:"""
                     
                     # Confirm to owner
                     preview = formatted_reply[:80] + "..." if len(formatted_reply) > 80 else formatted_reply
-                    await send_whatsapp_message(phone, f"✓ {escalation_code} resolved!\nSent to {customer_name}:\n\n\"{preview}\"")
+                    await send_whatsapp_message(phone, f"[OK] {escalation_code} resolved!\nSent to {customer_name}:\n\n\"{preview}\"")
                     
                     logger.info(f"Owner reply for {escalation_code} polished and forwarded to customer: {customer_phone}")
                     return {
@@ -3645,11 +3645,11 @@ Write the polished reply:"""
                                 {"$set": {"last_message": formatted_reply, "last_message_at": datetime.now(timezone.utc).isoformat(), "status": "active"}}
                             )
                         
-                        await send_whatsapp_message(phone, f"✓ {escalation_code} resolved!\nSent to {customer_name}")
+                        await send_whatsapp_message(phone, f"[OK] {escalation_code} resolved!\nSent to {customer_name}")
                         return {"success": True, "mode": "owner_reply_forwarded", "escalation_code": escalation_code}
                 else:
                     # Multiple pending escalations - ask owner to specify
-                    pending_msg = "⚠️ Multiple pending escalations. Please reply with the escalation code:\n\n"
+                    pending_msg = "[WARNING] Multiple pending escalations. Please reply with the escalation code:\n\n"
                     for esc in pending_escalations:
                         code = esc.get("escalation_code", "ESC??")
                         name = esc.get("customer_name", "Unknown")
@@ -3680,7 +3680,7 @@ Write the polished reply:"""
                 )
                 
                 # Send confirmation to owner
-                confirm_msg = f"✓ Lead created for {lead_data['customer_name']} ({lead_data['phone']}). AI has initiated contact about {lead_data['product_interest']}."
+                confirm_msg = f"[OK] Lead created for {lead_data['customer_name']} ({lead_data['phone']}). AI has initiated contact about {lead_data['product_interest']}."
                 await send_whatsapp_message(phone, confirm_msg)
                 
                 return {
