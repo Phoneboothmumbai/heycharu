@@ -766,16 +766,27 @@ Reply (use catalog/KB data if available, only say "ESCALATE: [reason]" if produc
             await escalate_to_owner(customer, conversation_history, message, "AI returned empty response")
             return "Let me check on that and get back to you shortly."
         
-        # CHECK FOR EXPLICIT ESCALATION REQUEST (only if AI explicitly says ESCALATE:)
-        if response.strip().upper().startswith("ESCALATE:"):
-            escalation_reason = response.replace("ESCALATE:", "").replace("escalate:", "").strip()
+        # CHECK FOR ESCALATION REQUEST - anywhere in the response
+        if "ESCALATE:" in response.upper():
+            # Extract escalation reason
+            import re
+            escalation_match = re.search(r'ESCALATE:\s*(.+?)(?:\n|$)', response, re.IGNORECASE)
+            escalation_reason = escalation_match.group(1).strip() if escalation_match else "Customer needs assistance"
+            
             logger.info(f"AI requested escalation: {escalation_reason}")
             
             # Send escalation to owner
             await escalate_to_owner(customer, conversation_history, message, escalation_reason)
             
-            # Return friendly message to customer
-            return "Let me check on that for you and get back shortly! 🙏"
+            # Remove the ESCALATE part and send the clean response to customer
+            clean_response = re.sub(r'ESCALATE:\s*[^\n]+\n?', '', response, flags=re.IGNORECASE).strip()
+            
+            # If there's still a meaningful response, send it
+            if clean_response and len(clean_response) > 10:
+                return clean_response
+            else:
+                # Otherwise send a friendly placeholder
+                return "Let me check on that for you and get back shortly! 🙏"
         
         # Update topic if exists
         if active_topic:
