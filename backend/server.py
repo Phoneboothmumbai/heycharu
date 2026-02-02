@@ -832,6 +832,14 @@ async def generate_ai_reply(customer_id: str, conversation_id: str, message: str
         ai_instructions = settings.get("ai_instructions", "") if settings else ""
         business_name = settings.get("business_name", "NeoStore") if settings else "NeoStore"
         
+        # ========== LOAD AI BEHAVIOR POLICY ==========
+        ai_policy = await get_ai_policy_config()
+        policy_enabled = ai_policy.get("enabled", True)
+        global_rules = ai_policy.get("global_rules", {})
+        states_config = ai_policy.get("states", {})
+        response_rules = ai_policy.get("response_rules", {})
+        fallback_rules = ai_policy.get("fallback", {})
+        
         # ========== STEP 1: CONTEXT FETCH ==========
         # Fetch customer profile
         customer_profile = f"""
@@ -867,7 +875,7 @@ Devices: {', '.join([d.get('model', '') for d in customer.get('devices', [])[:3]
         
         # Search Products (Excel/Database)
         products = await db.products.find(
-            {"is_active": True}, 
+            {"is_active": True},
             {"_id": 0, "name": 1, "base_price": 1, "category": 1, "sku": 1}
         ).to_list(200)
         product_catalog = "\n".join([
