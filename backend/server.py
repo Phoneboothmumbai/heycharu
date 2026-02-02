@@ -2848,7 +2848,7 @@ async def handle_incoming_whatsapp(data: WhatsAppIncoming):
                     
                     # Polish the reply using AI - keep meaning, make professional
                     try:
-                        polish_prompt = f"""You are a helpful store assistant. Polish this owner's reply to make it professional and friendly for a customer.
+                        polish_prompt = f"""Polish this owner's reply to make it professional and friendly for a customer.
 
 ORIGINAL CUSTOMER QUESTION: "{original_question}"
 
@@ -2867,7 +2867,8 @@ Write the polished reply:"""
 
                         chat = LlmChat(
                             api_key=EMERGENT_LLM_KEY,
-                            session_id=f"polish-{pending_escalation['id']}"
+                            session_id=f"polish-{pending_escalation['id']}",
+                            system_message="You are a helpful store assistant. Polish the owner's reply to make it professional and friendly."
                         ).with_model("openai", "gpt-5.2")
                         
                         polished_reply = await chat.send_message(UserMessage(text=polish_prompt))
