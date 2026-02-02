@@ -11,6 +11,42 @@ import { Search, Send, Phone, MessageSquare, Sparkles, User as UserIcon, Clock, 
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
+// Status badge helper
+const getStatusBadge = (conv) => {
+  const status = conv.status?.toLowerCase();
+  
+  if (status === "waiting_for_owner" || status === "escalated") {
+    // Check if overdue (past SLA deadline)
+    const isOverdue = conv.sla_deadline && new Date(conv.sla_deadline) < new Date();
+    
+    if (isOverdue) {
+      return (
+        <Badge variant="destructive" className="text-xs flex items-center gap-1">
+          <AlertTriangle className="w-3 h-3" />
+          OVERDUE
+        </Badge>
+      );
+    }
+    return (
+      <Badge variant="outline" className="text-xs text-orange-500 border-orange-500 flex items-center gap-1">
+        <Clock className="w-3 h-3" />
+        WAITING
+      </Badge>
+    );
+  }
+  
+  if (status === "active") {
+    return (
+      <Badge variant="outline" className="text-xs text-green-500 border-green-500 flex items-center gap-1">
+        <CheckCircle2 className="w-3 h-3" />
+        ACTIVE
+      </Badge>
+    );
+  }
+  
+  return null;
+};
+
 const ConversationsPage = () => {
   const [conversations, setConversations] = useState([]);
   const [selectedConversation, setSelectedConversation] = useState(null);
