@@ -4,6 +4,10 @@ const path = require("path");
 const fs = require("fs");
 
 // ───────────────────────────────────────────────────────────────────────────────
+// ===== Recursion guard for getArrayIterationContext/analyzeMemberExpression =====
+let recursionDepth = 0;
+const MAX_RECURSION_DEPTH = 15;
+
 // ===== Dynamic composite detection (auto-exclude) =====
 const EXTENSIONS = [".tsx", ".ts", ".jsx", ".js"];
 const PROJECT_ROOT = path.resolve(__dirname, '../..'); // frontend root (../../ from plugins/visual-edits/)
