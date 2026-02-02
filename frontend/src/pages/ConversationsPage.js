@@ -210,10 +210,11 @@ const ConversationsPage = () => {
                       <p className="text-sm text-muted-foreground truncate mt-1">
                         {conv.last_message || "No messages"}
                       </p>
-                      <div className="flex items-center gap-2 mt-2">
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
                         <Badge variant="outline" className="text-xs text-[#25D366]">
                           WhatsApp
                         </Badge>
+                        {getStatusBadge(conv)}
                         {conv.unread_count > 0 && (
                           <Badge className="bg-primary text-xs">{conv.unread_count}</Badge>
                         )}
