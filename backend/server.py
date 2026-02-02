@@ -1154,11 +1154,11 @@ OUT OF SCOPE MESSAGE: "{scope_message}"
 {pending_context}
 
 === INSTRUCTION ===
-1. First, identify which STATE this message belongs to
-2. Check if the answer exists in PRODUCT CATALOG or KB
-3. Apply all POLICY CONSTRAINTS
-4. If info not found, output ONLY: "ESCALATE_REQUIRED"
-5. Generate a {tone.replace('_', ' ')} response under {max_response_length} chars
+1. LOOK AT KNOWLEDGE BASE DATA BELOW - if the answer is there, USE IT DIRECTLY
+2. If customer asks for price/product info and KB has matching data, GIVE THE PRICE from KB
+3. NEVER say "let me check" if the data is already in KB below
+4. Only say ESCALATE_REQUIRED if data is truly NOT in KB
+5. Keep response short and direct
 
 Your reply:"""
 
