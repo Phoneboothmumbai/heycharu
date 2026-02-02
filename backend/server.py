@@ -3132,10 +3132,18 @@ Write the polished reply:"""
                             "created_at": datetime.now(timezone.utc).isoformat()
                         })
                         
-                        # Update conversation last message
+                        # Update conversation - reset status to active after owner replies
                         await db.conversations.update_one(
                             {"id": conv["id"]},
-                            {"$set": {"last_message": formatted_reply, "last_message_at": datetime.now(timezone.utc).isoformat()}}
+                            {"$set": {
+                                "last_message": formatted_reply,
+                                "last_message_at": datetime.now(timezone.utc).isoformat(),
+                                "status": "active",  # Reset to active after owner resolved
+                                "escalated_at": None,
+                                "escalation_reason": None,
+                                "sla_deadline": None,
+                                "sla_reminders_sent": 0
+                            }}
                         )
                     
                     # Confirm to owner with preview
