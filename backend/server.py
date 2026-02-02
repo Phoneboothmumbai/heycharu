@@ -839,6 +839,10 @@ async def generate_ai_reply(customer_id: str, conversation_id: str, message: str
         states_config = ai_policy.get("states", {})
         response_rules = ai_policy.get("response_rules", {})
         fallback_rules = ai_policy.get("fallback", {})
+        system_triggers = ai_policy.get("system_triggers", {})
+        
+        # Log policy scan
+        logger.info(f"AI Policy Scan - Enabled: {policy_enabled}, Topics: {len(global_rules.get('allowed_topics', []))}, States: {len(states_config)}, Response Rules: {len(response_rules)}")
         
         # ========== STEP 1: CONTEXT FETCH ==========
         # Fetch customer profile
