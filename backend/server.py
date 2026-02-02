@@ -1267,6 +1267,8 @@ async def upload_excel_to_kb(file: UploadFile = File(...), user: dict = Depends(
     """
     import pandas as pd
     import io
+    import zipfile
+    import re
     
     filename = file.filename.lower()
     if not filename.endswith(('.xlsx', '.xls', '.csv')):
@@ -1278,42 +1280,44 @@ async def upload_excel_to_kb(file: UploadFile = File(...), user: dict = Depends(
         if not contents or len(contents) < 10:
             raise HTTPException(status_code=400, detail="File is empty or too small")
         
-        # Try to read the file
-        try:
-            if filename.endswith('.csv'):
-                df = pd.read_csv(io.BytesIO(contents))
-            else:
-                # Try with openpyxl engine first, then xlrd
-                try:
-                    df = pd.read_excel(io.BytesIO(contents), engine='openpyxl')
-                except Exception:
-                    df = pd.read_excel(io.BytesIO(contents))
-        except Exception as read_error:
-            raise HTTPException(status_code=400, detail=f"Cannot read file: {str(read_error)}. Make sure it's a valid Excel/CSV file.")
+        df = None
         
-        if df.empty:
+        # Try to read the file with different methods
+        if filename.endswith('.csv'):
+            df = pd.read_csv(io.BytesIO(contents))
+        else:
+            # Method 1: Try standard pandas
+            try:
+                df = pd.read_excel(io.BytesIO(contents), engine='openpyxl')
+                if df.empty or len(df.columns) == 0:
+                    df = None
+            except Exception as e1:
+                logger.info(f"Standard read failed: {e1}")
+                df = None
+            
+            # Method 2: For strict conformance XLSX (like Apple price lists)
+            if df is None or df.empty:
+                try:
+                    df = parse_strict_xlsx(io.BytesIO(contents))
+                    logger.info(f"Strict XLSX parser succeeded: {len(df) if df is not None else 0} rows")
+                except Exception as e2:
+                    logger.error(f"Strict XLSX parser failed: {e2}")
+                    raise HTTPException(status_code=400, detail=f"Cannot read file. Please save it as CSV and try again.")
+        
+        if df is None or df.empty:
             raise HTTPException(status_code=400, detail="File has no data rows")
         
         # Convert column names to lowercase for easier matching
         df.columns = [str(col).lower().strip() for col in df.columns]
         original_cols = list(df.columns)
         
-        logger.info(f"Excel upload - Columns found: {original_cols}, Rows: {len(df)}")
+        logger.info(f"Excel upload - Columns found: {original_cols[:10]}, Rows: {len(df)}")
         
         now = datetime.now(timezone.utc).isoformat()
         added_count = 0
         
         # DETECT FORMAT: Apple Price List (Part Number, Description, ALP Inc VAT)
         if 'part number' in df.columns and 'description' in df.columns:
-            # Map Apple columns to our product format
-            df = df.rename(columns={
-                'part number': 'sku',
-                'description': 'name',
-                'alp inc vat': 'price',
-                'sap part description': 'short_name',
-                'solutions & offerings': 'category',
-                'solutions &amp; offerings': 'category'
-            })
             logger.info("Detected Apple Price List format")
         
         # Check if this is a KB upload or Product upload
@@ -1346,17 +1350,29 @@ async def upload_excel_to_kb(file: UploadFile = File(...), user: dict = Depends(
                 "message": f"Added {added_count} KB articles"
             }
         
-        elif 'name' in df.columns:
-            # Products upload - handle various price column names
+        # Products upload - handle Apple format and standard format
+        elif ('part number' in df.columns and 'description' in df.columns) or ('name' in df.columns):
+            # Map Apple columns if present
+            name_col = 'description' if 'description' in df.columns else 'name'
+            sku_col = 'part number' if 'part number' in df.columns else 'sku'
+            
+            # Find price column
             price_col = None
-            for col in ['price', 'base_price', 'alp inc vat', 'alp', 'mrp', 'cost']:
+            for col in ['alp inc vat', 'alp', 'price', 'base_price', 'mrp', 'cost']:
                 if col in df.columns:
                     price_col = col
                     break
             
+            # Find category column
+            cat_col = None
+            for col in ['solutions & offerings', 'solutions &amp; offerings', 'category']:
+                if col in df.columns:
+                    cat_col = col
+                    break
+            
             for _, row in df.iterrows():
-                name = str(row.get('name', '')).strip() if pd.notna(row.get('name')) else ''
-                if not name or name.lower() == 'nan':
+                name = str(row.get(name_col, '')).strip() if pd.notna(row.get(name_col)) else ''
+                if not name or name.lower() == 'nan' or len(name) < 3:
                     continue
                 
                 # Get price
@@ -1370,24 +1386,28 @@ async def upload_excel_to_kb(file: UploadFile = File(...), user: dict = Depends(
                 
                 # Get category
                 category = 'general'
-                if pd.notna(row.get('category')):
-                    category = str(row.get('category')).strip()
-                elif pd.notna(row.get('solutions & offerings')):
-                    category = str(row.get('solutions & offerings')).strip()
+                if cat_col and pd.notna(row.get(cat_col)):
+                    cat_val = str(row.get(cat_col)).strip()
+                    if cat_val and cat_val.lower() != 'nan':
+                        category = cat_val
                 
-                if not category or category.lower() == 'nan':
-                    category = 'general'
+                # Get SKU
+                sku = str(uuid.uuid4())[:8]
+                if sku_col and pd.notna(row.get(sku_col)):
+                    sku_val = str(row.get(sku_col)).strip()
+                    if sku_val and sku_val.lower() != 'nan':
+                        sku = sku_val
                 
                 product = {
                     "id": str(uuid.uuid4()),
                     "name": name[:200],
-                    "description": str(row.get('description', '')).strip() if pd.notna(row.get('description')) else '',
+                    "description": "",
                     "category": category,
-                    "sku": str(row.get('sku', str(uuid.uuid4())[:8])).strip() if pd.notna(row.get('sku')) else str(uuid.uuid4())[:8],
+                    "sku": sku,
                     "base_price": price,
                     "tax_rate": 18,
                     "final_price": price * 1.18 if price > 0 else 0,
-                    "stock": int(row.get('stock', 0)) if pd.notna(row.get('stock')) else 0,
+                    "stock": 0,
                     "images": [],
                     "specifications": {},
                     "is_active": True,
@@ -1407,7 +1427,7 @@ async def upload_excel_to_kb(file: UploadFile = File(...), user: dict = Depends(
             available_cols = ', '.join(original_cols[:10])
             raise HTTPException(
                 status_code=400, 
-                detail=f"Excel must have columns: [title, content] for KB or [name, price] for products. Found: {available_cols}"
+                detail=f"Excel must have columns: [title, content] for KB or [name/description, price] for products. Found: {available_cols}"
             )
         
     except HTTPException:
@@ -1415,6 +1435,92 @@ async def upload_excel_to_kb(file: UploadFile = File(...), user: dict = Depends(
     except Exception as e:
         logger.error(f"Excel upload error: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to process Excel: {str(e)}")
+
+def parse_strict_xlsx(file_bytes):
+    """Parse strict conformance XLSX files that openpyxl can't handle (like Apple price lists)"""
+    import zipfile
+    import re
+    import pandas as pd
+    import io
+    
+    with zipfile.ZipFile(file_bytes, 'r') as z:
+        # Read shared strings
+        shared_strings = []
+        if 'xl/sharedStrings.xml' in z.namelist():
+            content = z.read('xl/sharedStrings.xml').decode('utf-8')
+            # Extract all <t> tags content
+            strings = re.findall(r'<t[^>]*>([^<]*)</t>', content)
+            shared_strings = [s.replace('&amp;', '&') for s in strings]
+        
+        if not shared_strings:
+            return None
+        
+        # Find header row indices
+        headers = ['Marketing Flag', 'NPI', 'Reprice Indicator', 'Part Number', 'UPC/EAN', 
+                   'Description', 'SAP Part Description', 'ALP Inc VAT', 'Solutions & Offerings']
+        header_lower = [h.lower() for h in headers]
+        
+        # Find where headers are in shared strings
+        header_indices = {}
+        for i, s in enumerate(shared_strings):
+            s_clean = s.replace('&amp;', '&').lower()
+            if s_clean in header_lower:
+                header_indices[s_clean] = i
+        
+        # Read the actual sheet data
+        if 'xl/worksheets/sheet1.xml' not in z.namelist():
+            return None
+        
+        sheet_content = z.read('xl/worksheets/sheet1.xml').decode('utf-8')
+        
+        # Parse rows - find data rows (after headers)
+        rows_data = []
+        row_pattern = re.compile(r'<row[^>]*r="(\d+)"[^>]*>(.*?)</row>', re.DOTALL)
+        cell_pattern = re.compile(r'<c[^>]*r="([A-Z]+)\d+"[^>]*(?:t="([^"]*)")?[^>]*>(?:<v>([^<]*)</v>)?', re.DOTALL)
+        
+        for row_match in row_pattern.finditer(sheet_content):
+            row_num = int(row_match.group(1))
+            row_content = row_match.group(2)
+            
+            # Skip first 10 rows (metadata)
+            if row_num <= 10:
+                continue
+            
+            cells = {}
+            for cell_match in cell_pattern.finditer(row_content):
+                col_letter = cell_match.group(1)
+                cell_type = cell_match.group(2)
+                cell_value = cell_match.group(3)
+                
+                if cell_value:
+                    if cell_type == 's' and cell_value.isdigit():
+                        # Shared string reference
+                        idx = int(cell_value)
+                        if idx < len(shared_strings):
+                            cells[col_letter] = shared_strings[idx]
+                    else:
+                        cells[col_letter] = cell_value
+            
+            if cells:
+                rows_data.append(cells)
+        
+        # Convert to DataFrame with proper column mapping
+        # A=Marketing Flag, B=NPI, C=Reprice, D=Part Number, E=UPC, F=Description, G=SAP, H=ALP, I=Solutions
+        col_mapping = {'A': 'marketing flag', 'B': 'npi', 'C': 'reprice indicator', 
+                      'D': 'part number', 'E': 'upc/ean', 'F': 'description',
+                      'G': 'sap part description', 'H': 'alp inc vat', 'I': 'solutions & offerings'}
+        
+        df_data = []
+        for row in rows_data:
+            mapped_row = {}
+            for col, header in col_mapping.items():
+                mapped_row[header] = row.get(col, '')
+            df_data.append(mapped_row)
+        
+        if df_data:
+            return pd.DataFrame(df_data)
+        
+        return None
 
 # ============== ESCALATIONS ROUTES ==============
 
