@@ -1879,10 +1879,11 @@ async def get_unanswered_questions(status: Optional[str] = None, relevance: Opti
     
     # Build query - default to pending questions
     query = {}
-    if status:
+    if status and status != "all":
         query["status"] = status
-    else:
+    elif not status:
         query["status"] = "pending_owner_reply"  # Default: only pending
+    # If status == "all", don't add status filter
     
     if relevance:
         query["relevance"] = relevance
