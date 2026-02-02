@@ -3789,14 +3789,23 @@ async def handle_incoming_whatsapp(data: WhatsAppIncoming):
             logger.info(f"HISTORICAL MODE: Message from {phone_formatted} is before connection timestamp - storing without reply")
             
             # Store the message for context but do not trigger any AI response
-            # Find or create customer silently
-            customer = await db.customers.find_one({"phone": {"$regex": phone[-10:]}}, {"_id": 0})
+            # Find or create customer silently - use same lookup as main flow
+            phone_last10 = phone[-10:] if len(phone) >= 10 else phone
+            customer = await db.customers.find_one(
+                {"$or": [
+                    {"phone": {"$regex": phone_last10}},
+                    {"phone": phone},
+                    {"phone": phone_formatted}
+                ]},
+                {"_id": 0}
+            )
             if not customer:
                 customer_id = str(uuid.uuid4())
                 customer = {
                     "id": customer_id,
                     "name": f"WhatsApp {phone_formatted}",
-                    "phone": phone_formatted,
+                    "phone": phone,  # Store clean digits for consistent matching
+                    "phone_formatted": phone_formatted,
                     "customer_type": "individual",
                     "addresses": [],
                     "preferences": {"communication": "whatsapp"},
@@ -3810,8 +3819,14 @@ async def handle_incoming_whatsapp(data: WhatsAppIncoming):
                 }
                 await db.customers.insert_one(customer)
             
-            # Find or create conversation
-            conv = await db.conversations.find_one({"customer_id": customer["id"]})
+            # Find or create conversation - use same lookup as main flow
+            conv = await db.conversations.find_one(
+                {"$or": [
+                    {"customer_id": customer["id"]},
+                    {"customer_phone": {"$regex": phone_last10}}
+                ]},
+                {"_id": 0}
+            )
             if not conv:
                 conv_id = str(uuid.uuid4())
                 conv = {
