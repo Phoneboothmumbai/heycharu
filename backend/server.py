@@ -895,28 +895,62 @@ Tags: {', '.join(customer.get('tags', [])) or 'None'}
         ]) if past_messages else "No previous messages"
         
         # ========== STEP 2: KNOWLEDGE LOOKUP ==========
-        # Load ALL KB content - NO LIMITS
+        # Load ALL KB articles
         kb_articles = await db.knowledge_base.find(
             {"is_active": True}, 
             {"_id": 0, "title": 1, "content": 1, "category": 1}
         ).to_list(100)
         
-        # Send FULL content to AI - no truncation
-        kb_content = ""
+        # SMART SEARCH: Extract only relevant lines matching customer message
+        search_terms = [w.lower().strip() for w in message.split() if len(w) > 2]
+        # Add common variations
+        if "airpod" in message.lower():
+            search_terms.extend(["airpods", "airpod"])
+        if "iphone" in message.lower():
+            search_terms.extend(["iphone"])
+        if "mac" in message.lower():
+            search_terms.extend(["macbook", "imac", "mac mini", "mac pro", "mac studio"])
+        
+        relevant_lines = []
+        total_kb_chars = 0
+        
         for kb in kb_articles:
-            kb_content += f"\n\n=== {kb.get('title', 'Untitled')} ({kb.get('category', 'general')}) ===\n"
-            kb_content += kb.get('content', '')
+            content = kb.get('content', '')
+            total_kb_chars += len(content)
+            
+            # Split by newlines and search each line
+            lines = content.split('\n')
+            for line in lines:
+                line_stripped = line.strip()
+                if not line_stripped or len(line_stripped) < 5:
+                    continue
+                    
+                line_lower = line_stripped.lower()
+                # Check if ANY search term is in this line
+                if any(term in line_lower for term in search_terms):
+                    relevant_lines.append(line_stripped)
         
-        logger.info(f"KB loaded: {len(kb_articles)} articles, {len(kb_content)} total characters")
+        # Deduplicate and limit to prevent context overflow
+        relevant_lines = list(dict.fromkeys(relevant_lines))[:50]
         
-        # Search Products (if any in products collection)
+        logger.info(f"KB Search: {len(search_terms)} terms, found {len(relevant_lines)} matching lines from {total_kb_chars} total chars")
+        
+        if relevant_lines:
+            kb_content = "=== MATCHING DATA FROM PRICE LIST ===\n" + "\n".join(relevant_lines)
+        else:
+            # No matches - show first 5000 chars as context
+            kb_content = ""
+            for kb in kb_articles:
+                kb_content += f"\n=== {kb.get('title', 'KB')} ===\n{kb.get('content', '')[:5000]}"
+        
+        # Search Products collection (if any)
         products = await db.products.find(
             {"is_active": True},
             {"_id": 0, "name": 1, "base_price": 1, "category": 1, "sku": 1}
         ).to_list(500)
         
         product_catalog = "\n".join([
-            f"• {p['name']}: Rs.{p.get('base_price', 0):,.0f} (SKU: {p.get('sku', 'N/A')})"
+            f"• {p['name']}: Rs.{p.get('base_price', 0):,.0f}"
             for p in products
         ]) if products else ""
         
