@@ -966,7 +966,7 @@ Your response (use sources OR say "ESCALATE_REQUIRED"):"""
 
 
 async def escalate_to_owner(customer: dict, conversation_history: str, customer_message: str, error_reason: str):
-    """Notify owner via WhatsApp when AI cannot respond - with summarized context"""
+    """Notify owner via WhatsApp when AI cannot respond - with unique escalation ID"""
     try:
         # Get owner phone from settings (check both "global" and "owner" types)
         settings = await db.settings.find_one({"type": "global"}, {"_id": 0})
@@ -979,15 +979,20 @@ async def escalate_to_owner(customer: dict, conversation_history: str, customer_
             logger.warning("No owner phone configured for escalation")
             return
         
+        # Generate unique escalation code
+        escalation_code = await generate_escalation_code()
+        
         # Build escalation message with summary
         customer_name = customer.get("name", "Unknown") if customer else "Unknown"
         customer_phone = customer.get("phone", "Unknown") if customer else "Unknown"
+        customer_id = customer.get("id") if customer else None
         
         # Create a brief summary instead of raw history
         history_lines = conversation_history.split("\n")[-6:]  # Last 6 messages
         summary = "\n".join(history_lines) if history_lines else "New conversation"
         
-        escalation_msg = f"""🚨 *Need Your Input*
+        # NEW: Escalation message with unique code
+        escalation_msg = f"""🚨 *{escalation_code}* - Need Your Input
 
 *Customer:* {customer_name}
 *Phone:* {customer_phone}
@@ -999,7 +1004,8 @@ async def escalate_to_owner(customer: dict, conversation_history: str, customer_
 {summary}
 
 ---
-Just reply with your answer - I'll format and send it to them."""
+Reply with: *{escalation_code}: your answer*
+Example: {escalation_code}: Yes, we have it in stock for ₹45,000"""
 
         # Send to owner
         await send_whatsapp_message(owner_phone, escalation_msg)
@@ -1009,34 +1015,43 @@ Just reply with your answer - I'll format and send it to them."""
         sla_deadline = (now + timedelta(minutes=30)).isoformat()
         escalation_id = str(uuid.uuid4())
         
-        # Store escalation for tracking with SLA info
+        # Get conversation_id if available
+        conv = await db.conversations.find_one({"customer_id": customer_id}, {"_id": 0, "id": 1}) if customer_id else None
+        conversation_id = conv.get("id") if conv else None
+        
+        # Store escalation for tracking with SLA info and unique code
         await db.escalations.insert_one({
             "id": escalation_id,
-            "customer_id": customer.get("id") if customer else None,
+            "escalation_code": escalation_code,
+            "customer_id": customer_id,
             "customer_phone": customer_phone,
             "customer_name": customer_name,
+            "conversation_id": conversation_id,
             "reason": error_reason,
             "customer_message": customer_message,
             "status": "pending_owner_reply",
+            "priority": "medium",
             "sla_deadline": sla_deadline,
             "sla_reminders_sent": 0,
+            "relevance": "relevant",
             "created_at": now.isoformat()
         })
         
         # Also update the conversation with escalation status
-        if customer:
+        if customer_id:
             await db.conversations.update_one(
-                {"customer_id": customer.get("id")},
+                {"customer_id": customer_id},
                 {"$set": {
                     "status": "waiting_for_owner",
                     "escalated_at": now.isoformat(),
                     "escalation_reason": error_reason,
+                    "current_escalation_code": escalation_code,
                     "sla_deadline": sla_deadline,
                     "sla_reminders_sent": 0
                 }}
             )
         
-        logger.info(f"Escalation sent to owner for customer: {customer_phone}, SLA deadline: {sla_deadline}")
+        logger.info(f"Escalation {escalation_code} sent to owner for customer: {customer_phone}, SLA deadline: {sla_deadline}")
         
     except Exception as e:
         logger.error(f"Failed to escalate to owner: {e}")
