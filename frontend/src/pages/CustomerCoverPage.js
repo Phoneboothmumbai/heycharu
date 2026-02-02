@@ -374,6 +374,9 @@ const CustomerCoverPage = () => {
   const customerTags = customer.tags || [];
   const customerDevices = customer.devices || [];
   const customerAddresses = customer.addresses || [];
+  const customerNotesHistory = customer.notes_history || [];
+  const customerInvoices = customer.invoices || [];
+  const customerAiInsights = customer.ai_insights || aiInsights;
 
   return (
     <div className="space-y-6 animate-in" data-testid="customer-360-page">
