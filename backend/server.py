@@ -895,63 +895,30 @@ Tags: {', '.join(customer.get('tags', [])) or 'None'}
         ]) if past_messages else "No previous messages"
         
         # ========== STEP 2: KNOWLEDGE LOOKUP ==========
-        # Search KB - find relevant content based on customer message
+        # Load ALL KB content - NO LIMITS
         kb_articles = await db.knowledge_base.find(
             {"is_active": True}, 
             {"_id": 0, "title": 1, "content": 1, "category": 1}
-        ).to_list(50)
+        ).to_list(100)
         
-        # Smart search: Find relevant lines from KB content matching the message
-        search_terms = [w.lower() for w in message.split() if len(w) > 2]
-        relevant_kb_lines = []
-        
+        # Send FULL content to AI - no truncation
+        kb_content = ""
         for kb in kb_articles:
-            content = kb.get('content', '')
-            # Split content into lines/entries
-            lines = content.split('\n')
-            for line in lines:
-                line_lower = line.lower()
-                # Check if any search term matches this line
-                if any(term in line_lower for term in search_terms):
-                    if line.strip() and len(line.strip()) > 10:
-                        relevant_kb_lines.append(line.strip())
+            kb_content += f"\n\n=== {kb.get('title', 'Untitled')} ({kb.get('category', 'general')}) ===\n"
+            kb_content += kb.get('content', '')
         
-        # Deduplicate and limit
-        relevant_kb_lines = list(dict.fromkeys(relevant_kb_lines))[:20]
+        logger.info(f"KB loaded: {len(kb_articles)} articles, {len(kb_content)} total characters")
         
-        # Build KB content for AI
-        if relevant_kb_lines:
-            kb_content = "=== MATCHING PRODUCTS/INFO ===\n" + "\n".join(relevant_kb_lines)
-        else:
-            # Fallback: show first 2000 chars of KB
-            kb_content = "\n\n".join([
-                f"[{kb.get('category', 'general').upper()}] {kb['title']}:\n{kb['content'][:2000]}"
-                for kb in kb_articles
-            ]) if kb_articles else ""
-        
-        # Search Products (Excel/Database) - also search by message terms
+        # Search Products (if any in products collection)
         products = await db.products.find(
             {"is_active": True},
             {"_id": 0, "name": 1, "base_price": 1, "category": 1, "sku": 1}
-        ).to_list(200)
+        ).to_list(500)
         
-        # Filter products matching search terms
-        matching_products = []
-        for p in products:
-            name_lower = p.get('name', '').lower()
-            if any(term in name_lower for term in search_terms):
-                matching_products.append(p)
-        
-        if matching_products:
-            product_catalog = "=== MATCHING PRODUCTS ===\n" + "\n".join([
-                f"• {p['name']}: Rs.{p.get('base_price', 0):,.0f}"
-                for p in matching_products[:20]
-            ])
-        else:
-            product_catalog = "\n".join([
-                f"• {p['name']}: Rs.{p.get('base_price', 0):,.0f}"
-                for p in products[:50]
-            ]) if products else ""
+        product_catalog = "\n".join([
+            f"• {p['name']}: Rs.{p.get('base_price', 0):,.0f} (SKU: {p.get('sku', 'N/A')})"
+            for p in products
+        ]) if products else ""
         
         # Check if we have ANY verified sources
         has_kb = len(kb_articles) > 0
