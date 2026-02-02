@@ -878,7 +878,7 @@ For anything else: "I can help only with Apple products, repairs, and IT product
 
 Customer's message: "{message}"
 
-Your response:""""""
+Your response:"""
 
         # Generate response
         chat = LlmChat(
