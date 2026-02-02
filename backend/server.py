@@ -3975,7 +3975,7 @@ async def inject_lead_internal(customer_name: str, phone: str, product_interest:
 Thanks for reaching out to {store_name}!
 
 I see you are interested in the {product['name']}.
-It is available at Rs.{product['base_price']:,.0f}.
+It is available at Rs {product['base_price']:,.0f}.
 
 How can I help you today—more details, availability, or anything else?"""
     elif product_interest and product_interest != "General Inquiry":
