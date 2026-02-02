@@ -1965,7 +1965,7 @@ async def mark_question_relevance(question_id: str, relevance: str, user: dict =
     return {"message": f"Question marked as {relevance}"}
 
 @api_router.post("/unanswered-questions/{question_id}/add-kb-article")
-async def add_kb_article_for_question(question_id: str, title: str, content: str, category: str = "FAQ", tags: List[str] = [], user: dict = Depends(get_current_user)):
+async def add_kb_article_for_question(question_id: str, data: KbArticleCreateRequest, user: dict = Depends(get_current_user)):
     """Create a new KB article to answer this question.
     
     This will:
@@ -1986,10 +1986,10 @@ async def add_kb_article_for_question(question_id: str, title: str, content: str
     
     article = {
         "id": article_id,
-        "title": title,
-        "content": content,
-        "category": category,
-        "tags": tags + [question.get("customer_message", "")[:50]],  # Add question text as tag
+        "title": data.title,
+        "content": data.content,
+        "category": data.category,
+        "tags": data.tags + [question.get("customer_message", "")[:50]],  # Add question text as tag
         "source": "unanswered_question",
         "source_question_id": question_id,
         "created_at": now,
