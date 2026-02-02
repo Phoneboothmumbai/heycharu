@@ -3488,7 +3488,7 @@ async def handle_incoming_whatsapp(data: WhatsAppIncoming):
 
 ORIGINAL CUSTOMER QUESTION: "{original_question}"
 
-OWNER'S RAW REPLY: "{owner_reply}"
+OWNER RAW REPLY: "{owner_reply}"
 
 RULES:
 1. Keep ALL the information exactly the same (prices, specs, availability)
@@ -3601,7 +3601,7 @@ Write the polished reply:"""
                         try:
                             polish_prompt = f"""Polish this owner reply to make it professional and friendly.
 ORIGINAL CUSTOMER QUESTION: "{original_question}"
-OWNER'S RAW REPLY: "{owner_reply}"
+OWNER RAW REPLY: "{owner_reply}"
 RULES: Keep ALL info same, be friendly, 2-4 sentences, no mention of owner/boss.
 Write the polished reply:"""
 
