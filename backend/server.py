@@ -1058,31 +1058,27 @@ Your reply (short, human, NO "Hi" if already greeted):"""
                 escalation_reason = f"Missing info: {message[:50]}"
                 break
         
-        # ========== STEP 4: ESCALATE OR RESPOND ==========
+        # ========== STEP 4: ESCALATE OR RESPOND (POLICY-DRIVEN) ==========
         if needs_escalation:
-            # Check if this is a pure greeting or simple response - NEVER escalate these
-            if is_pure_greeting:
-                logger.info(f"Pure greeting detected, not escalating: {message}")
-                return "Hi! How can I help you today?"
+            # Check if this is a pure greeting - NEVER escalate (policy)
+            if is_pure_greeting and greeting_state.get("enabled", True):
+                logger.info(f"Pure greeting detected (policy), not escalating: {message}")
+                return greeting_state.get("response_template", "Hi! How can I help you today?")
             
-            if is_simple_response:
-                logger.info(f"Simple response detected, not escalating: {message}")
-                if simple_message in ["thanks", "thank you"]:
-                    return "You are welcome!"
-                elif simple_message in ["ok", "okay", "cool", "great", "fine", "alright"]:
-                    return "Great! Let me know if you need anything else."
-                elif simple_message in ["yes"]:
-                    return "Sure, tell me more."
-                elif simple_message in ["no"]:
-                    return "No problem. What else can I help with?"
-                elif simple_message in ["bye", "goodbye"]:
-                    return "Bye! Take care."
-                return "Okay!"
+            # Check if this is a closure message - handle with templates (policy)
+            if is_closure_message and closure_state.get("enabled", True):
+                logger.info(f"Closure message detected (policy): {message}")
+                # Find matching template
+                for trigger, response in closure_templates.items():
+                    if trigger in simple_message:
+                        return response
+                return "Okay! Let me know if you need anything else."
             
             # Check if there is already a pending escalation for this customer
             if pending_escalation:
+                escalation_state = states_config.get("ESCALATION", {})
                 logger.info(f"Skipping escalation - already pending: {pending_escalation.get('escalation_code')}")
-                return "Still checking on that for you - will update shortly!"
+                return escalation_state.get("placeholder_message", "Still checking on that for you - will update shortly!")
             
             logger.info(f"ESCALATING: {escalation_reason}")
             
