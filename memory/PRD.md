@@ -163,6 +163,9 @@ Trigger-based, permission-controlled automated messages with full anti-spam cont
 - ✅ Lead Injection
 - ✅ Excluded Numbers
 - ✅ Auto-Messages
+- ✅ Knowledge Base
+- ✅ Unanswered Questions
+- ✅ AI Policy (NEW)
 - ✅ Settings
 
 ## Test Credentials
