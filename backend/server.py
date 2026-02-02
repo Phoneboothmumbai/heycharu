@@ -880,11 +880,24 @@ Devices: {', '.join([d.get('model', '') for d in customer.get('devices', [])[:3]
         has_products = len(products) > 0
         source_verified = has_kb or has_products
         
-        # ========== PRE-CHECK: Simple conversational messages ==========
-        # These do not need escalation - AI can handle them directly
+        # ========== PRE-CHECK: Detect conversation state ==========
         simple_message = message.strip().lower()
-        simple_greetings = ["hi", "hello", "hey", "good morning", "good afternoon", "good evening", "thanks", "thank you", "ok", "okay", "yes", "no", "bye", "goodbye"]
-        is_simple_greeting = simple_message in simple_greetings or len(simple_message) < 4
+        
+        # Pure greetings (no intent)
+        pure_greetings = ["hi", "hello", "hey", "good morning", "good afternoon", "good evening", "hii", "hiii", "hlo", "helo"]
+        is_pure_greeting = simple_message in pure_greetings
+        
+        # Simple responses (not greetings but simple)
+        simple_responses = ["thanks", "thank you", "ok", "okay", "yes", "no", "bye", "goodbye", "cool", "great", "fine", "alright"]
+        is_simple_response = simple_message in simple_responses
+        
+        # Check if this is the FIRST message or a fresh greeting
+        is_first_message = len(past_messages) == 0
+        
+        # For pure greetings, we should NOT load conversation history context
+        # This prevents the AI from referencing old topics
+        if is_pure_greeting:
+            conversation_history = "[Fresh greeting - do not reference past topics]"
         
         # Check for pending escalation for this customer
         pending_escalation = await db.escalations.find_one(
