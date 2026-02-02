@@ -4583,6 +4583,199 @@ async def schedule_follow_up_api(
     
     return {"scheduled_id": scheduled_id, "delay_hours": delay_hours}
 
+# ============== AI BEHAVIOR POLICY ==============
+
+# Default AI Behavior Policy
+DEFAULT_AI_POLICY = {
+    "version": "1.0",
+    "enabled": True,
+    "last_updated": None,
+    "updated_by": None,
+    
+    # Global Rules
+    "global_rules": {
+        "allowed_topics": [
+            "apple_products",
+            "apple_repairs", 
+            "it_products",
+            "it_services"
+        ],
+        "disallowed_behavior": [
+            "off_topic_replies",
+            "competitor_comparison",
+            "repeating_greetings",
+            "assuming_intent",
+            "mentioning_delivery_without_context",
+            "guessing_prices",
+            "multiple_questions_at_once"
+        ],
+        "scope_message": "I can help with Apple products, repairs, and IT services. What do you need?"
+    },
+    
+    # Conversation States
+    "states": {
+        "GREETING": {
+            "enabled": True,
+            "triggers": ["hi", "hello", "hey", "good morning", "good afternoon", "good evening", "hii", "hiii", "hlo"],
+            "allowed_actions": ["greet_user", "ask_how_can_help"],
+            "forbidden_actions": ["product_pitch", "delivery_mention", "past_context_reference", "price_mention"],
+            "response_template": "Hi! How can I help you today?"
+        },
+        "INTENT_COLLECTION": {
+            "enabled": True,
+            "triggers": ["need", "want", "looking", "interested", "help", "issue", "problem"],
+            "allowed_actions": ["ask_clarifying_question"],
+            "rules": ["ask_one_question_only", "wait_for_response"],
+            "clarification_template": "Got it. Could you tell me more about what you need?"
+        },
+        "ACTION": {
+            "enabled": True,
+            "rules": ["respond_only_within_scope", "no_assumptions", "use_exact_prices"],
+            "sales_flow": {
+                "mention_delivery_only_if_asked": True,
+                "require_storage_confirmation": True
+            },
+            "repair_flow": {
+                "required_fields": ["device_model", "issue_description"],
+                "ask_one_field_at_a_time": True
+            }
+        },
+        "CLOSURE": {
+            "enabled": True,
+            "triggers": ["thanks", "thank you", "bye", "goodbye", "ok", "okay"],
+            "templates": {
+                "thanks": "You are welcome!",
+                "bye": "Bye! Take care.",
+                "ok": "Great! Let me know if you need anything else."
+            }
+        },
+        "ESCALATION": {
+            "enabled": True,
+            "triggers": ["escalate_required", "unknown_info", "out_of_scope"],
+            "placeholder_message": "Let me check on that and get back to you shortly.",
+            "notify_owner": True
+        }
+    },
+    
+    # Response Constraints
+    "response_rules": {
+        "greeting_limit": "once_per_conversation",
+        "question_limit": "one_at_a_time",
+        "max_response_length": 150,
+        "tone": "friendly_professional",
+        "language": "english_hinglish",
+        "emoji_usage": "minimal"
+    },
+    
+    # Fallback Rules
+    "fallback": {
+        "unclear_data": {
+            "action": "ask_for_clarification",
+            "template": "Could you please explain a bit more?"
+        },
+        "out_of_scope": {
+            "action": "polite_refusal",
+            "template": "I can help with Apple products, repairs, and IT services. Is there something specific in that area?"
+        },
+        "system_error": {
+            "action": "escalate_to_human",
+            "template": "Let me connect you with our team for this."
+        }
+    },
+    
+    # System Triggers
+    "system_triggers": {
+        "lead_inject": {
+            "enabled": True,
+            "keywords": ["lead inject", "customer name", "lead:"],
+            "action": ["extract_name", "extract_phone", "extract_product", "store_lead"],
+            "reply_to_user": False,
+            "start_state": "GREETING"
+        }
+    }
+}
+
+@api_router.get("/ai-policy")
+async def get_ai_policy(user: dict = Depends(get_current_user)):
+    """Get the current AI Behavior Policy"""
+    policy = await db.ai_policy.find_one({"type": "global"}, {"_id": 0})
+    if not policy:
+        # Return default and save it
+        policy = {**DEFAULT_AI_POLICY, "type": "global"}
+        await db.ai_policy.insert_one(policy.copy())
+        policy.pop("_id", None)
+    return policy
+
+@api_router.put("/ai-policy")
+async def update_ai_policy(policy: Dict[str, Any], user: dict = Depends(get_current_user)):
+    """Update the AI Behavior Policy"""
+    policy["last_updated"] = datetime.now(timezone.utc).isoformat()
+    policy["updated_by"] = user.get("name", "Admin")
+    policy["type"] = "global"
+    
+    await db.ai_policy.update_one(
+        {"type": "global"},
+        {"$set": policy},
+        upsert=True
+    )
+    return {"message": "AI Policy updated successfully"}
+
+@api_router.put("/ai-policy/section/{section}")
+async def update_ai_policy_section(section: str, data: Dict[str, Any], user: dict = Depends(get_current_user)):
+    """Update a specific section of the AI Policy"""
+    valid_sections = ["global_rules", "states", "response_rules", "fallback", "system_triggers"]
+    if section not in valid_sections:
+        raise HTTPException(status_code=400, detail=f"Invalid section. Valid: {valid_sections}")
+    
+    await db.ai_policy.update_one(
+        {"type": "global"},
+        {
+            "$set": {
+                section: data,
+                "last_updated": datetime.now(timezone.utc).isoformat(),
+                "updated_by": user.get("name", "Admin")
+            }
+        },
+        upsert=True
+    )
+    return {"message": f"AI Policy section '{section}' updated"}
+
+@api_router.put("/ai-policy/state/{state_name}")
+async def update_ai_policy_state(state_name: str, data: Dict[str, Any], user: dict = Depends(get_current_user)):
+    """Update a specific state in the AI Policy"""
+    state_name = state_name.upper()
+    valid_states = ["GREETING", "INTENT_COLLECTION", "ACTION", "CLOSURE", "ESCALATION"]
+    if state_name not in valid_states:
+        raise HTTPException(status_code=400, detail=f"Invalid state. Valid: {valid_states}")
+    
+    await db.ai_policy.update_one(
+        {"type": "global"},
+        {
+            "$set": {
+                f"states.{state_name}": data,
+                "last_updated": datetime.now(timezone.utc).isoformat(),
+                "updated_by": user.get("name", "Admin")
+            }
+        },
+        upsert=True
+    )
+    return {"message": f"AI Policy state '{state_name}' updated"}
+
+@api_router.post("/ai-policy/reset")
+async def reset_ai_policy(user: dict = Depends(get_current_user)):
+    """Reset AI Policy to defaults"""
+    policy = {**DEFAULT_AI_POLICY, "type": "global", "last_updated": datetime.now(timezone.utc).isoformat(), "updated_by": user.get("name", "Admin")}
+    await db.ai_policy.replace_one({"type": "global"}, policy, upsert=True)
+    return {"message": "AI Policy reset to defaults"}
+
+# Helper function to load AI policy for generate_ai_reply
+async def get_ai_policy_config() -> dict:
+    """Get AI policy configuration for use in AI reply generation"""
+    policy = await db.ai_policy.find_one({"type": "global"}, {"_id": 0})
+    if not policy:
+        return DEFAULT_AI_POLICY
+    return policy
+
 # ============== SEED DATA ==============
 
 @api_router.post("/seed")
