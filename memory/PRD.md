@@ -16,7 +16,29 @@ Sales Brain is a SaaS platform that acts as a central brain for customer intelli
 - ✅ Knowledge Base (FAQs, Policies)
 - ✅ Escalation System
 
-### Customer 360° Cover View (NEW - Feb 2026)
+### 4-Part AI Control System (NEW - Feb 2026)
+Complete AI conversation control with strict decision logic:
+
+1. **Context Fetch** - AI loads customer profile, conversation history, KB articles, and product catalog
+2. **Decision Logic** - AI uses ONLY verified sources (KB + Products), NO guessing allowed
+3. **Escalation with SLA** - If info not found, AI says "Let me check..." and escalates to owner with 30-min SLA timer
+4. **Reply Polishing** - When owner replies, AI polishes the response (grammar/tone) and sends to customer
+
+**Conversation Status Labels:**
+- `ACTIVE` (Green) - Normal conversation, AI is handling
+- `WAITING` (Orange) - Escalated, waiting for owner response
+- `OVERDUE` (Red) - Past 30-min SLA deadline
+
+**SLA Timer Features:**
+- 30-minute deadline for owner replies
+- Auto-reminders via WhatsApp + Dashboard (up to 3 reminders)
+- Visual status indicators in Conversations page
+
+**API Endpoints:**
+- `GET /api/escalations/pending-sla` - Get pending escalations with SLA status
+- `POST /api/escalations/check-sla` - Trigger SLA check and send reminders
+
+### Customer 360° Cover View
 - ✅ Comprehensive single-page customer dashboard
 - ✅ Customer header with avatar, name, type badge, contact info
 - ✅ Total Lifetime Value display
@@ -88,18 +110,18 @@ Trigger-based, permission-controlled automated messages with full anti-spam cont
 ### Frontend Pages
 - ✅ Dashboard
 - ✅ Customers
-- ✅ Conversations
+- ✅ Conversations (with status badges)
 - ✅ Products
 - ✅ Orders
 - ✅ WhatsApp Connection
-- ✅ Lead Injection (NEW)
-- ✅ Excluded Numbers (NEW)
-- ✅ Auto-Messages (NEW)
+- ✅ Lead Injection
+- ✅ Excluded Numbers
+- ✅ Auto-Messages
 - ✅ Settings
 
 ## Test Credentials
-- Email: demo@test.com
-- Password: demo123
+- Email: test@test.com
+- Password: test123
 
 ## WhatsApp Command Formats
 From owner's phone (set Owner Phone in Settings):
@@ -128,18 +150,18 @@ ai_uncertain: "Let me check this and get back to you shortly."
 - [x] ~~Number Exclusion~~ DONE
 - [x] ~~Auto-Messaging MVP~~ DONE
 - [x] ~~Customer 360° Cover View~~ DONE
+- [x] ~~4-Part AI Control System~~ DONE
 - [ ] Real osTicket API integration
 
 ### P1 - High Priority
+- [ ] Image Understanding (GPT-4 Vision / Gemini Vision)
 - [ ] Background scheduler for follow-ups
 - [ ] Historical message sync on WhatsApp connect
 - [ ] Payment gateway (Stripe/Razorpay)
-- [ ] Escalation notifications to owner's WhatsApp
 
 ### P2 - Medium Priority
 - [ ] Reseller/Referral module
 - [ ] Voice note transcription
-- [ ] Image attachment analysis
 - [ ] Advanced analytics
 - [ ] Warranty/AMC reminders
 - [ ] Owner-triggered broadcasts
@@ -153,8 +175,19 @@ ai_uncertain: "Let me check this and get back to you shortly."
 1. **osTicket** - Mocked (tickets in MongoDB)
 2. **Payment Gateway** - Mocked
 3. **Follow-up Scheduler** - Manual only (no background job yet)
+4. **WhatsApp** - Requires QR scan to connect in preview
 
 ## Changelog
+
+### February 2, 2026 (Session 4)
+- **NEW**: 4-Part AI Control System implemented
+  - Context fetch from customer profile, KB, product catalog
+  - Strict decision tree (no AI guessing)
+  - Owner escalation with 30-min SLA timer
+  - AI reply polishing when owner responds
+- **NEW**: Conversation status labels (ACTIVE, WAITING, OVERDUE)
+- **NEW**: SLA check endpoints for dashboard monitoring
+- **FIX**: Fixed babel-metadata-plugin infinite recursion issue
 
 ### February 1, 2026 (Session 3)
 - **NEW**: Customer 360° Cover View - comprehensive single-page customer dashboard
