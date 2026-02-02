@@ -492,13 +492,226 @@ const CustomerCoverPage = () => {
       )}
 
       {/* Tabs */}
-      <Tabs defaultValue="topics" className="space-y-4">
-        <TabsList className="grid grid-cols-4 lg:w-[400px]">
+      <Tabs defaultValue="details" className="space-y-4">
+        <TabsList className="grid grid-cols-6 lg:w-[600px]">
+          <TabsTrigger value="details" data-testid="tab-details">Details</TabsTrigger>
           <TabsTrigger value="topics" data-testid="tab-topics">Topics</TabsTrigger>
           <TabsTrigger value="orders" data-testid="tab-orders">Orders</TabsTrigger>
           <TabsTrigger value="devices" data-testid="tab-devices">Devices</TabsTrigger>
+          <TabsTrigger value="invoices" data-testid="tab-invoices">Invoices</TabsTrigger>
           <TabsTrigger value="notes" data-testid="tab-notes">Notes</TabsTrigger>
         </TabsList>
+
+        {/* Details Tab - NEW */}
+        <TabsContent value="details" className="space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Customer Details Card */}
+            <Card className="border-border/50">
+              <CardHeader className="pb-3 flex flex-row items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <User className="w-4 h-4" />
+                  Customer Details
+                </CardTitle>
+                {!editingDetails ? (
+                  <Button variant="ghost" size="sm" onClick={() => setEditingDetails(true)}>
+                    <Edit2 className="w-4 h-4 mr-1" />Edit
+                  </Button>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => setEditingDetails(false)}>Cancel</Button>
+                    <Button size="sm" onClick={saveCustomerDetails}><Save className="w-4 h-4 mr-1" />Save</Button>
+                  </div>
+                )}
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {editingDetails ? (
+                  <>
+                    <div>
+                      <Label>Name</Label>
+                      <Input value={customerDetails.name} onChange={e => setCustomerDetails({...customerDetails, name: e.target.value})} />
+                    </div>
+                    <div>
+                      <Label>Email</Label>
+                      <Input type="email" value={customerDetails.email} onChange={e => setCustomerDetails({...customerDetails, email: e.target.value})} />
+                    </div>
+                    <div>
+                      <Label>Phone</Label>
+                      <Input value={customerDetails.phone} onChange={e => setCustomerDetails({...customerDetails, phone: e.target.value})} />
+                    </div>
+                    <div>
+                      <Label>Company</Label>
+                      <Input value={customerDetails.company_id} onChange={e => setCustomerDetails({...customerDetails, company_id: e.target.value})} />
+                    </div>
+                    <div>
+                      <Label>Customer Type</Label>
+                      <Select value={customerDetails.customer_type} onValueChange={v => setCustomerDetails({...customerDetails, customer_type: v})}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="individual">Individual</SelectItem>
+                          <SelectItem value="business">Business</SelectItem>
+                          <SelectItem value="reseller">Reseller</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </>
+                ) : (
+                  <div className="space-y-3 text-sm">
+                    <div className="flex justify-between"><span className="text-muted-foreground">Name:</span><span className="font-medium">{customer.name}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Email:</span><span className="font-medium">{customer.email || "-"}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Phone:</span><span className="font-medium">{customer.phone}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Company:</span><span className="font-medium">{customer.company_id || "-"}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Type:</span><Badge variant="outline">{customer.customer_type}</Badge></div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Payment Preferences Card */}
+            <Card className="border-border/50">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <CreditCard className="w-4 h-4" />
+                  Payment Preferences
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {editingDetails ? (
+                  <>
+                    <div>
+                      <Label>Preferred Method</Label>
+                      <Select value={paymentPrefs.preferred_method} onValueChange={v => setPaymentPrefs({...paymentPrefs, preferred_method: v})}>
+                        <SelectTrigger><SelectValue placeholder="Select method" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cash">Cash</SelectItem>
+                          <SelectItem value="upi">UPI</SelectItem>
+                          <SelectItem value="card">Card</SelectItem>
+                          <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                          <SelectItem value="cheque">Cheque</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>UPI ID</Label>
+                      <Input value={paymentPrefs.upi_id || ""} onChange={e => setPaymentPrefs({...paymentPrefs, upi_id: e.target.value})} placeholder="name@upi" />
+                    </div>
+                    <div>
+                      <Label>Bank Account</Label>
+                      <Input value={paymentPrefs.bank_account || ""} onChange={e => setPaymentPrefs({...paymentPrefs, bank_account: e.target.value})} placeholder="Account details" />
+                    </div>
+                  </>
+                ) : (
+                  <div className="space-y-3 text-sm">
+                    <div className="flex justify-between"><span className="text-muted-foreground">Preferred:</span><span className="font-medium">{customer.payment_preferences?.preferred_method || "Not set"}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">UPI:</span><span className="font-medium">{customer.payment_preferences?.upi_id || "-"}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Bank:</span><span className="font-medium">{customer.payment_preferences?.bank_account || "-"}</span></div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Addresses Section */}
+          <Card className="border-border/50">
+            <CardHeader className="pb-3 flex flex-row items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <MapPin className="w-4 h-4" />
+                Addresses ({customerAddresses.length})
+              </CardTitle>
+              <Dialog open={isAddAddressOpen} onOpenChange={setIsAddAddressOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm"><Plus className="w-4 h-4 mr-1" />Add Address</Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader><DialogTitle>Add Address</DialogTitle></DialogHeader>
+                  <div className="space-y-3">
+                    <div><Label>Label</Label><Input placeholder="Home, Office, etc." value={addressForm.label} onChange={e => setAddressForm({...addressForm, label: e.target.value})} /></div>
+                    <div><Label>Address Line 1 *</Label><Input placeholder="Street address" value={addressForm.line1} onChange={e => setAddressForm({...addressForm, line1: e.target.value})} /></div>
+                    <div><Label>Address Line 2</Label><Input placeholder="Apartment, suite, etc." value={addressForm.line2} onChange={e => setAddressForm({...addressForm, line2: e.target.value})} /></div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div><Label>City *</Label><Input value={addressForm.city} onChange={e => setAddressForm({...addressForm, city: e.target.value})} /></div>
+                      <div><Label>State</Label><Input value={addressForm.state} onChange={e => setAddressForm({...addressForm, state: e.target.value})} /></div>
+                    </div>
+                    <div><Label>Pincode</Label><Input value={addressForm.pincode} onChange={e => setAddressForm({...addressForm, pincode: e.target.value})} /></div>
+                  </div>
+                  <DialogFooter><Button onClick={addAddress}>Add Address</Button></DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </CardHeader>
+            <CardContent>
+              {customerAddresses.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">No addresses added</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {customerAddresses.map((addr, idx) => (
+                    <div key={addr.id || idx} className="p-3 rounded-lg bg-accent/50 flex justify-between items-start">
+                      <div>
+                        {addr.label && <Badge variant="outline" className="mb-1">{addr.label}</Badge>}
+                        <p className="text-sm">{addr.line1}</p>
+                        {addr.line2 && <p className="text-sm text-muted-foreground">{addr.line2}</p>}
+                        <p className="text-sm text-muted-foreground">{addr.city}{addr.state && `, ${addr.state}`} {addr.pincode}</p>
+                      </div>
+                      <Button variant="ghost" size="icon" className="text-red-500" onClick={() => removeAddress(addr.id)}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* AI Insights Section */}
+          <Card className="border-border/50 border-purple-200 dark:border-purple-900">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Brain className="w-4 h-4 text-purple-500" />
+                AI-Collected Insights
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {Object.keys(customerAiInsights).length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">No insights collected yet. AI will learn from conversations.</p>
+              ) : (
+                <div className="space-y-4">
+                  {customerAiInsights.product_interests?.length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium mb-2">Product Interests</p>
+                      <div className="flex flex-wrap gap-2">
+                        {customerAiInsights.product_interests.map((item, i) => (
+                          <Badge key={i} variant="secondary">{item}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {customerAiInsights.mentioned_issues?.length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium mb-2">Mentioned Issues</p>
+                      <div className="flex flex-wrap gap-2">
+                        {customerAiInsights.mentioned_issues.map((item, i) => (
+                          <Badge key={i} variant="outline" className="text-orange-500">{item}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {customerAiInsights.preferences && (
+                    <div>
+                      <p className="text-sm font-medium mb-2">Detected Preferences</p>
+                      <div className="text-sm space-y-1">
+                        {customerAiInsights.preferences.urgency && <p>Urgency: <Badge variant="destructive">{customerAiInsights.preferences.urgency}</Badge></p>}
+                        {customerAiInsights.preferences.interested_in_delivery && <p>Interested in delivery</p>}
+                        {customerAiInsights.preferences.interested_in_emi && <p>Interested in EMI/Installments</p>}
+                        {customerAiInsights.preferences.needs_support && <p>Needs support/repair</p>}
+                      </div>
+                    </div>
+                  )}
+                  {customerAiInsights.interaction_count && (
+                    <p className="text-xs text-muted-foreground">Total interactions: {customerAiInsights.interaction_count}</p>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* Topics Tab */}
         <TabsContent value="topics" className="space-y-4">
