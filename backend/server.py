@@ -1055,6 +1055,8 @@ Notify owner: {escalation_state.get("notify_owner", True)}
 5. NEVER ask multiple questions at once
 6. Keep replies under {max_response_length} characters
 7. Sound human, {tone.replace('_', ' ')}, not robotic
+8. NEVER ask customer for SKU, product code, item code, model number, or part number - customers don't know these
+9. If customer says "sure", "ok", "yes", "pricing" after you said "let me check" - say ESCALATE_REQUIRED
 
 === SCOPE LOCK ===
 OUT OF SCOPE MESSAGE: "{scope_message}"
