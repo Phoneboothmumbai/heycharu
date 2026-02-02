@@ -508,6 +508,51 @@ async def generate_conversation_summary(conversation_id: str):
 
 # ============== ESCALATION HELPERS ==============
 
+async def generate_escalation_code() -> str:
+    """Generate a unique human-readable escalation code like ESC01, ESC02, etc."""
+    # Find the highest existing code number
+    latest = await db.escalations.find_one(
+        {"escalation_code": {"$exists": True}},
+        {"escalation_code": 1, "_id": 0},
+        sort=[("created_at", -1)]
+    )
+    
+    if latest and latest.get("escalation_code"):
+        try:
+            # Extract number from ESC01, ESC02, etc.
+            code = latest["escalation_code"]
+            num = int(code.replace("ESC", ""))
+            return f"ESC{num + 1:02d}"
+        except:
+            pass
+    
+    # Count existing escalations as fallback
+    count = await db.escalations.count_documents({})
+    return f"ESC{count + 1:02d}"
+
+def parse_escalation_code_from_message(message: str) -> tuple:
+    """Parse escalation code from owner reply message.
+    
+    Expected formats:
+    - "ESC01: Here's the answer..."
+    - "ESC01 Here's the answer..."
+    - "esc01: answer"
+    
+    Returns: (escalation_code, actual_reply) or (None, original_message)
+    """
+    import re
+    
+    # Pattern: ESC followed by digits, optionally followed by : or space
+    pattern = r'^(ESC\d+)[:\s]+(.+)$'
+    match = re.match(pattern, message.strip(), re.IGNORECASE)
+    
+    if match:
+        code = match.group(1).upper()
+        reply = match.group(2).strip()
+        return (code, reply)
+    
+    return (None, message)
+
 async def create_escalation(customer_id: str, conversation_id: str, reason: str, message_content: str, priority: str = "medium"):
     """Create an escalation for human review"""
     customer = await db.customers.find_one({"id": customer_id}, {"_id": 0})
