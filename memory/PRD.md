@@ -197,11 +197,13 @@ ai_uncertain: "Let me check this and get back to you shortly."
 - [x] ~~Auto-Messaging MVP~~ DONE
 - [x] ~~Customer 360° Cover View~~ DONE
 - [x] ~~4-Part AI Control System~~ DONE
+- [x] ~~Unanswered Questions Page~~ DONE
+- [x] ~~Escalation Thread Mapping (ESC codes)~~ DONE
 - [ ] Real osTicket API integration
 
 ### P1 - High Priority
 - [ ] Image Understanding (GPT-4 Vision / Gemini Vision)
-- [ ] Background scheduler for follow-ups
+- [ ] Background scheduler for follow-ups & SLA checks
 - [ ] Historical message sync on WhatsApp connect
 - [ ] Payment gateway (Stripe/Razorpay)
 
@@ -224,6 +226,21 @@ ai_uncertain: "Let me check this and get back to you shortly."
 4. **WhatsApp** - Requires QR scan to connect in preview
 
 ## Changelog
+
+### February 2, 2026 (Session 5)
+- **NEW**: Unanswered Questions Page
+  - Dashboard to view all escalated questions
+  - Stats cards: Pending, Overdue, Resolved, Irrelevant
+  - Add KB Article directly from unanswered question
+  - Link existing KB articles or Excel data
+  - Mark questions as relevant/irrelevant
+- **NEW**: Escalation Thread Mapping System
+  - Unique escalation codes: ESC01, ESC02, ESC03...
+  - Owner replies with `ESC01: answer` format
+  - Strict one-to-one mapping (no mixing answers)
+  - If multiple pending, owner must specify which one
+- **FIX**: Stats cards now show total counts (not filtered counts)
+- **FIX**: KB article creation uses JSON body (handles special chars like ₹)
 
 ### February 2, 2026 (Session 4)
 - **NEW**: 4-Part AI Control System implemented
