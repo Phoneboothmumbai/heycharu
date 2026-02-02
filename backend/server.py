@@ -766,27 +766,44 @@ Reply (use catalog/KB data if available, only say "ESCALATE: [reason]" if produc
             await escalate_to_owner(customer, conversation_history, message, "AI returned empty response")
             return "Let me check on that and get back to you shortly."
         
+        import re
+        
         # CHECK FOR ESCALATION REQUEST - anywhere in the response
+        needs_escalation = False
+        escalation_reason = ""
+        
         if "ESCALATE:" in response.upper():
-            # Extract escalation reason
-            import re
+            needs_escalation = True
             escalation_match = re.search(r'ESCALATE:\s*(.+?)(?:\n|$)', response, re.IGNORECASE)
             escalation_reason = escalation_match.group(1).strip() if escalation_match else "Customer needs assistance"
-            
-            logger.info(f"AI requested escalation: {escalation_reason}")
+        
+        # Also detect "we don't have", "not in our list", "don't have the price", etc.
+        uncertain_patterns = [
+            r"we don't have",
+            r"don't have the (price|pricing|info|information)",
+            r"not in our (list|catalog|database)",
+            r"don't have .* (confirmed|latest|current) price",
+            r"not listed",
+            r"no pricing",
+            r"i'll need to check",
+            r"let me (check|verify|confirm)",
+            r"i don't have .* information"
+        ]
+        
+        for pattern in uncertain_patterns:
+            if re.search(pattern, response.lower()):
+                needs_escalation = True
+                escalation_reason = f"AI indicated missing info: {message[:50]}"
+                break
+        
+        if needs_escalation:
+            logger.info(f"Escalating to owner: {escalation_reason}")
             
             # Send escalation to owner
             await escalate_to_owner(customer, conversation_history, message, escalation_reason)
             
-            # Remove the ESCALATE part and send the clean response to customer
-            clean_response = re.sub(r'ESCALATE:\s*[^\n]+\n?', '', response, flags=re.IGNORECASE).strip()
-            
-            # If there's still a meaningful response, send it
-            if clean_response and len(clean_response) > 10:
-                return clean_response
-            else:
-                # Otherwise send a friendly placeholder
-                return "Let me check on that for you and get back shortly! 🙏"
+            # Always send a clean, friendly response to customer
+            return "Let me check this for you and get back to you shortly! 🙏"
         
         # Update topic if exists
         if active_topic:
