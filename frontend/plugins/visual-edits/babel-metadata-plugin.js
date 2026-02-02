@@ -615,33 +615,36 @@ const babelMetadataPlugin = ({ types: t }) => {
    */
   function analyzeMemberExpression(exprPath, state, depth = 0) {
     // Prevent infinite recursion
-    if (depth > 10) {
+    recursionDepth++;
+    if (recursionDepth > MAX_RECURSION_DEPTH || depth > MAX_RECURSION_DEPTH) {
+      recursionDepth--;
       return { type: "unknown", path: "", isEditable: false };
     }
     
-    const node = exprPath.node;
+    try {
+      const node = exprPath.node;
 
-    // Build the property path (e.g., "name" or "address.city")
-    const propPath = buildPropertyPath(node);
+      // Build the property path (e.g., "name" or "address.city")
+      const propPath = buildPropertyPath(node);
 
-    // Get the root object
-    let root = node;
-    while (t.isMemberExpression(root.object)) {
-      root = root.object;
-    }
+      // Get the root object
+      let root = node;
+      while (t.isMemberExpression(root.object)) {
+        root = root.object;
+      }
 
-    const rootObj = root.object;
+      const rootObj = root.object;
 
-    if (t.isIdentifier(rootObj)) {
-      const rootName = rootObj.name;
+      if (t.isIdentifier(rootObj)) {
+        const rootName = rootObj.name;
 
-      // Check if we're inside an array iteration (like .map())
-      const arrayContext = getArrayIterationContext(exprPath, state, depth + 1);
+        // Check if we're inside an array iteration (like .map())
+        const arrayContext = getArrayIterationContext(exprPath, state, depth + 1);
 
-      if (arrayContext && arrayContext.itemParam === rootName) {
-        // This is item.property where item comes from array.map(item => ...)
-        return {
-          type: "static-imported",
+        if (arrayContext && arrayContext.itemParam === rootName) {
+          // This is item.property where item comes from array.map(item => ...)
+          return {
+            type: "static-imported",
           varName: arrayContext.arrayVar,
           file: arrayContext.arrayFile,
           absFile: arrayContext.absFile,
