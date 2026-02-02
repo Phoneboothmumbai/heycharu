@@ -805,7 +805,7 @@ Devices: {', '.join([d.get('model', '') for d in customer.get('devices', [])[:3]
         source_verified = has_kb or has_products
         
         # ========== PRE-CHECK: Simple conversational messages ==========
-        # These don't need escalation - AI can handle them directly
+        # These do not need escalation - AI can handle them directly
         simple_message = message.strip().lower()
         simple_greetings = ["hi", "hello", "hey", "good morning", "good afternoon", "good evening", "thanks", "thank you", "ok", "okay", "yes", "no", "bye", "goodbye"]
         is_simple_greeting = simple_message in simple_greetings or len(simple_message) < 4
@@ -865,7 +865,7 @@ PRODUCT CATALOG:
    → Do NOT guess prices or availability
 
 4. **If there's a PENDING ESCALATION**:
-   → Acknowledge customer is waiting: "I'm still checking on that for you. I'll have an answer shortly."
+   → Acknowledge customer is waiting: "I'm still checking on that for you. I will have an answer shortly."
    → Do NOT create duplicate escalation
 
 === FORBIDDEN RESPONSES ===
@@ -931,14 +931,14 @@ Your response:""""""
         
         # Info-not-found patterns
         not_found_patterns = [
-            r"we don't have",
+            r"we do not have",
             r"not in our (list|catalog|database)",
             r"no pricing",
             r"i('ll| will) need to check",
             r"let me (check|verify|confirm)",
-            r"couldn't find",
+            r"could not find",
             r"not available",
-            r"don't have .* information"
+            r"do not have .* information"
         ]
         
         for pattern in not_found_patterns:
@@ -949,7 +949,7 @@ Your response:""""""
         
         # ========== STEP 4: ESCALATE OR RESPOND ==========
         if needs_escalation:
-            # Check if this is a simple greeting - don't escalate those
+            # Check if this is a simple greeting - do not escalate those
             if is_simple_greeting:
                 logger.info(f"Skipping escalation for simple greeting: {message}")
                 return f"Hi! How can I help you today?"
@@ -957,7 +957,7 @@ Your response:""""""
             # Check if there's already a pending escalation for this customer
             if pending_escalation:
                 logger.info(f"Skipping escalation - already pending: {pending_escalation.get('escalation_code')}")
-                return "I'm still checking on your earlier question. I'll have an answer for you shortly. Is there anything else I can help with in the meantime?"
+                return "I'm still checking on your earlier question. I will have an answer for you shortly. Is there anything else I can help with in the meantime?"
             
             logger.info(f"ESCALATING: {escalation_reason}")
             
@@ -1120,7 +1120,7 @@ DEFAULT_TEMPLATES = {
     "partial_conversation": "Sharing a quick reminder — I was waiting for your response on {topic}.",
     "price_shared": "Let me know if you'd like me to proceed or need any clarification on the pricing.",
     "order_confirmed": "Thanks for confirming your order! I'm sharing the payment details below. Total: ₹{amount}",
-    "payment_received": "Payment received [OK] We'll update you once the order is processed.",
+    "payment_received": "Payment received [OK] We will update you once the order is processed.",
     "order_completed": "Your order has been completed. Let us know if you need anything else!",
     "ticket_created": "We've created a support ticket for this. Ticket ID: #{ticket_id}",
     "ticket_updated": "Quick update — your ticket #{ticket_id} is now being worked on.",
@@ -1817,7 +1817,7 @@ Q: Their question:
 
 Time Overdue by: {time_overdue} minutes
 
-Just reply with your answer - I'll format and send it."""
+Just reply with your answer - I will format and send it."""
 
                     # Send WhatsApp reminder to owner
                     if owner_phone:
@@ -1923,7 +1923,7 @@ async def get_unanswered_questions(status: Optional[str] = None, relevance: Opti
         query["status"] = status
     elif not status:
         query["status"] = "pending_owner_reply"  # Default: only pending
-    # If status == "all", don't add status filter
+    # If status == "all", do not add status filter
     
     if relevance and relevance != "all":
         query["relevance"] = relevance
@@ -1956,7 +1956,7 @@ async def get_unanswered_questions(status: Optional[str] = None, relevance: Opti
             "customer_name": esc.get("customer_name", "Unknown"),
             "customer_phone": esc.get("customer_phone", ""),
             "question": esc.get("customer_message", ""),
-            "reason": esc.get("reason", "AI couldn't answer"),
+            "reason": esc.get("reason", "AI could not answer"),
             "status": esc.get("status", "pending_owner_reply"),
             "relevance": esc.get("relevance", "relevant"),
             "conversation_count": 1,  # Could be enhanced to count related messages
@@ -2823,7 +2823,7 @@ Reply briefly (1-3 sentences):"""
             if any(word in msg_lower for word in words):
                 detected_topics.append(topic_type)
         
-        # Check if KB couldn't answer (flag for research)
+        # Check if KB could not answer (flag for research)
         kb_insufficient = "Let me check" in response or "connect you with" in response
         
         return {
@@ -3332,7 +3332,7 @@ async def handle_incoming_whatsapp(data: WhatsAppIncoming):
         if data.isHistorical:
             logger.info(f"HISTORICAL MODE: Message from {phone_formatted} is before connection timestamp - storing without reply")
             
-            # Store the message for context but don't trigger any AI response
+            # Store the message for context but do not trigger any AI response
             # Find or create customer silently
             customer = await db.customers.find_one({"phone": {"$regex": phone[-10:]}}, {"_id": 0})
             if not customer:
