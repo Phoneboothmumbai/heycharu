@@ -1823,9 +1823,10 @@ async def upload_excel_to_kb(file: UploadFile = File(...), user: dict = Depends(
         
         # Build ONE plain text content from ALL rows
         all_content = []
-        all_content.append(f"=== {original_filename} ===\n")
-        all_content.append(f"Columns: {', '.join(columns)}\n")
-        all_content.append("=" * 50 + "\n\n")
+        all_content.append(f"=== {original_filename} ===")
+        all_content.append(f"Columns: {', '.join(columns)}")
+        all_content.append("=" * 50)
+        all_content.append("")
         
         for idx, row in df.iterrows():
             row_lines = []
@@ -1836,9 +1837,9 @@ async def upload_excel_to_kb(file: UploadFile = File(...), user: dict = Depends(
             
             if row_lines:
                 all_content.append("\n".join(row_lines))
-                all_content.append("\n---\n")
+                all_content.append("")  # One blank line between products
         
-        # Create ONE KB article for entire file
+        # Create ONE KB article for entire file (up to 10MB)
         title = original_filename.replace('.xlsx', '').replace('.xls', '').replace('.csv', '').replace('_', ' ').replace('-', ' ').title()
         
         article = {
