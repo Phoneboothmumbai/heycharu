@@ -929,75 +929,87 @@ const babelMetadataPlugin = ({ types: t }) => {
    * Detects if we're inside an array iteration (.map(), etc.) and extracts context
    */
   function getArrayIterationContext(exprPath, state, depth = 0) {
-    // Prevent infinite recursion
-    if (depth > 10) {
+    // Prevent infinite recursion using global counter
+    recursionDepth++;
+    if (recursionDepth > MAX_RECURSION_DEPTH || depth > MAX_RECURSION_DEPTH) {
+      recursionDepth--;
       return null;
     }
     
-    // Find the parent .map() or similar call
-    const callExprParent = exprPath.findParent((p) => {
-      if (!p.isCallExpression()) return false;
+    try {
+      // Find the parent .map() or similar call
+      const callExprParent = exprPath.findParent((p) => {
+        if (!p.isCallExpression()) return false;
 
-      const { callee } = p.node;
-      if (!t.isMemberExpression(callee) || !t.isIdentifier(callee.property)) {
-        return false;
+        const { callee } = p.node;
+        if (!t.isMemberExpression(callee) || !t.isIdentifier(callee.property)) {
+          return false;
+        }
+
+        return ARRAY_METHODS.has(callee.property.name);
+      });
+
+      if (!callExprParent) {
+        recursionDepth--;
+        return null;
       }
 
-      return ARRAY_METHODS.has(callee.property.name);
-    });
+      const callExpr = callExprParent.node;
+      const callee = callExpr.callee;
 
-    if (!callExprParent) return null;
+      // Get the array being iterated
+      const arrayNode = callee.object;
 
-    const callExpr = callExprParent.node;
-    const callee = callExpr.callee;
-
-    // Get the array being iterated
-    const arrayNode = callee.object;
-
-    // Get the callback function
-    const callback = callExpr.arguments[0];
-    if (!callback) return null;
-
-    // Get item parameter name(s)
-    let itemParam = null;
-    let indexParam = null;
-
-    if (t.isArrowFunctionExpression(callback) || t.isFunctionExpression(callback)) {
-      const params = callback.params;
-      if (params.length > 0 && t.isIdentifier(params[0])) {
-        itemParam = params[0].name;
+      // Get the callback function
+      const callback = callExpr.arguments[0];
+      if (!callback) {
+        recursionDepth--;
+        return null;
       }
-      if (params.length > 1 && t.isIdentifier(params[1])) {
-        indexParam = params[1].name;
+
+      // Get item parameter name(s)
+      let itemParam = null;
+      let indexParam = null;
+
+      if (t.isArrowFunctionExpression(callback) || t.isFunctionExpression(callback)) {
+        const params = callback.params;
+        if (params.length > 0 && t.isIdentifier(params[0])) {
+          itemParam = params[0].name;
+        }
+        if (params.length > 1 && t.isIdentifier(params[1])) {
+          indexParam = params[1].name;
+        }
       }
-    }
 
-    if (!itemParam) return null;
-
-    // Analyze the array source
-    let arrayVar = null;
-    let arrayFile = null;
-    let absFile = null;
-    let arrayLine = null;
-    let isEditable = false;
-
-    if (t.isIdentifier(arrayNode)) {
-      arrayVar = arrayNode.name;
-      // Pass skipArrayContext to avoid infinite recursion
-      const arrayInfo = analyzeIdentifier(arrayVar, callExprParent.get("callee.object"), state, { skipArrayContext: true });
-
-      if (arrayInfo) {
-        arrayFile = arrayInfo.file || null;
-        absFile = arrayInfo.absFile || null;
-        arrayLine = arrayInfo.line || null;
-        isEditable = arrayInfo.isEditable && arrayInfo.valueType === "array";
+      if (!itemParam) {
+        recursionDepth--;
+        return null;
       }
-    } else if (t.isMemberExpression(arrayNode)) {
-      // Handle cases like data.items.map(...)
-      const memberInfo = analyzeMemberExpression(
-        callExprParent.get("callee.object"),
-        state,
-        depth + 1
+
+      // Analyze the array source
+      let arrayVar = null;
+      let arrayFile = null;
+      let absFile = null;
+      let arrayLine = null;
+      let isEditable = false;
+
+      if (t.isIdentifier(arrayNode)) {
+        arrayVar = arrayNode.name;
+        // Pass skipArrayContext to avoid infinite recursion
+        const arrayInfo = analyzeIdentifier(arrayVar, callExprParent.get("callee.object"), state, { skipArrayContext: true });
+
+        if (arrayInfo) {
+          arrayFile = arrayInfo.file || null;
+          absFile = arrayInfo.absFile || null;
+          arrayLine = arrayInfo.line || null;
+          isEditable = arrayInfo.isEditable && arrayInfo.valueType === "array";
+        }
+      } else if (t.isMemberExpression(arrayNode)) {
+        // Handle cases like data.items.map(...)
+        const memberInfo = analyzeMemberExpression(
+          callExprParent.get("callee.object"),
+          state,
+          depth + 1
       );
       if (memberInfo) {
         arrayVar = memberInfo.varName;
