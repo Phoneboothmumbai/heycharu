@@ -1116,14 +1116,14 @@ async def send_whatsapp_message(phone: str, message: str) -> bool:
 
 # Default message templates
 DEFAULT_TEMPLATES = {
-    "no_response": "Just checking in — let me know if you need any help with {topic}.",
-    "partial_conversation": "Sharing a quick reminder — I was waiting for your response on {topic}.",
+    "no_response": "Just checking in - let me know if you need any help with {topic}.",
+    "partial_conversation": "Sharing a quick reminder - I was waiting for your response on {topic}.",
     "price_shared": "Let me know if you'd like me to proceed or need any clarification on the pricing.",
     "order_confirmed": "Thanks for confirming your order! I'm sharing the payment details below. Total: Rs.{amount}",
     "payment_received": "Payment received [OK] We will update you once the order is processed.",
     "order_completed": "Your order has been completed. Let us know if you need anything else!",
     "ticket_created": "We've created a support ticket for this. Ticket ID: #{ticket_id}",
-    "ticket_updated": "Quick update — your ticket #{ticket_id} is now being worked on.",
+    "ticket_updated": "Quick update - your ticket #{ticket_id} is now being worked on.",
     "ticket_resolved": "This issue has been resolved. Please let us know if you face it again.",
     "ai_uncertain": "Let me check this and get back to you shortly.",
     "human_takeover": "I'm personally looking into this for you."
@@ -3984,7 +3984,7 @@ How can I help you today - more details, availability, or anything else?"""
 Thanks for reaching out to {store_name}!
 
 I see you are interested in {product_interest}.
-How can I help you today—pricing, availability, or something else?"""
+How can I help you today-pricing, availability, or something else?"""
     else:
         outbound_msg = f"""{greeting}
 Thanks for reaching out to {store_name}!
