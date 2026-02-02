@@ -1773,19 +1773,17 @@ async def scrape_website_to_kb(data: WebScrapeRequest, user: dict = Depends(get_
 
 @api_router.post("/kb/upload-excel")
 async def upload_excel_to_kb(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
-    """Upload Excel/CSV file to add multiple KB articles or products
+    """Upload Excel/CSV file to Knowledge Base as plain text
     
-    Supports multiple formats:
-    1. KB Articles: title, content, category, tags
-    2. Products: name, price, category, description
-    3. Apple Price List: Part Number, Description, ALP Inc VAT
+    - ALL data goes to KB (never products)
+    - Stored as plain text for easy reading by AI and humans
+    - Each row becomes a KB article
     """
     import pandas as pd
     import io
-    import zipfile
-    import re
     
     filename = file.filename.lower()
+    original_filename = file.filename
     if not filename.endswith(('.xlsx', '.xls', '.csv')):
         raise HTTPException(status_code=400, detail="Only Excel (.xlsx, .xls) or CSV (.csv) files are allowed")
     
@@ -1797,153 +1795,75 @@ async def upload_excel_to_kb(file: UploadFile = File(...), user: dict = Depends(
         
         df = None
         
-        # Try to read the file with different methods
+        # Try to read the file
         if filename.endswith('.csv'):
             df = pd.read_csv(io.BytesIO(contents))
         else:
-            # Method 1: Try standard pandas
             try:
                 df = pd.read_excel(io.BytesIO(contents), engine='openpyxl')
-                if df.empty or len(df.columns) == 0:
-                    df = None
-            except Exception as e1:
-                logger.info(f"Standard read failed: {e1}")
-                df = None
-            
-            # Method 2: For strict conformance XLSX (like Apple price lists)
-            if df is None or df.empty:
+            except:
                 try:
                     df = parse_strict_xlsx(io.BytesIO(contents))
-                    logger.info(f"Strict XLSX parser succeeded: {len(df) if df is not None else 0} rows")
-                except Exception as e2:
-                    logger.error(f"Strict XLSX parser failed: {e2}")
-                    raise HTTPException(status_code=400, detail=f"Cannot read file. Please save it as CSV and try again.")
+                except:
+                    raise HTTPException(status_code=400, detail="Cannot read file. Please save as CSV and try again.")
         
         if df is None or df.empty:
             raise HTTPException(status_code=400, detail="File has no data rows")
         
-        # Convert column names to lowercase for easier matching
-        df.columns = [str(col).lower().strip() for col in df.columns]
-        original_cols = list(df.columns)
+        # Clean column names
+        df.columns = [str(col).strip() for col in df.columns]
+        columns = list(df.columns)
         
-        logger.info(f"Excel upload - Columns found: {original_cols[:10]}, Rows: {len(df)}")
+        logger.info(f"Excel upload to KB - File: {original_filename}, Columns: {columns[:10]}, Rows: {len(df)}")
         
         now = datetime.now(timezone.utc).isoformat()
+        
+        # Delete existing KB articles from this file (if re-uploading)
+        await db.knowledge_base.delete_many({"source_file": original_filename})
+        
+        # Convert ALL rows to plain text KB articles
         added_count = 0
         
-        # DETECT FORMAT: Apple Price List (Part Number, Description, ALP Inc VAT)
-        if 'part number' in df.columns and 'description' in df.columns:
-            logger.info("Detected Apple Price List format")
-        
-        # Check if this is a KB upload or Product upload
-        if 'title' in df.columns and 'content' in df.columns:
-            # KB Articles upload
-            for _, row in df.iterrows():
-                title = str(row.get('title', '')).strip() if pd.notna(row.get('title')) else ''
-                content = str(row.get('content', '')).strip() if pd.notna(row.get('content')) else ''
-                
-                if not title or not content:
-                    continue
-                
-                article = {
-                    "id": str(uuid.uuid4()),
-                    "title": title[:200],
-                    "category": str(row.get('category', 'general')).strip().lower() if pd.notna(row.get('category')) else 'general',
-                    "content": content,
-                    "tags": [t.strip() for t in str(row.get('tags', '')).split(',') if t.strip()] if pd.notna(row.get('tags')) else [],
-                    "is_active": True,
-                    "created_at": now,
-                    "updated_at": now
-                }
-                await db.knowledge_base.insert_one(article)
-                added_count += 1
+        for idx, row in df.iterrows():
+            # Build plain text content from all columns
+            content_lines = []
+            for col in columns:
+                val = row.get(col)
+                if pd.notna(val) and str(val).strip() and str(val).lower() != 'nan':
+                    content_lines.append(f"{col}: {str(val).strip()}")
             
-            return {
-                "success": True,
-                "type": "knowledge_base",
-                "added": added_count,
-                "message": f"Added {added_count} KB articles"
+            if not content_lines:
+                continue
+            
+            # Use first column value as title, or row number
+            first_val = str(row.get(columns[0], '')).strip() if pd.notna(row.get(columns[0])) else ''
+            title = first_val[:100] if first_val and first_val.lower() != 'nan' else f"Row {idx + 1}"
+            
+            # Plain text content
+            content = "\n".join(content_lines)
+            
+            article = {
+                "id": str(uuid.uuid4()),
+                "title": title,
+                "category": "excel-data",
+                "content": content,
+                "tags": ["excel", original_filename.replace('.xlsx', '').replace('.xls', '').replace('.csv', '')],
+                "source_file": original_filename,
+                "row_number": idx + 1,
+                "is_active": True,
+                "created_at": now,
+                "updated_at": now
             }
+            await db.knowledge_base.insert_one(article)
+            added_count += 1
         
-        # Products upload - handle Apple format and standard format
-        elif ('part number' in df.columns and 'description' in df.columns) or ('name' in df.columns):
-            # Map Apple columns if present
-            name_col = 'description' if 'description' in df.columns else 'name'
-            sku_col = 'part number' if 'part number' in df.columns else 'sku'
-            
-            # Find price column
-            price_col = None
-            for col in ['alp inc vat', 'alp', 'price', 'base_price', 'mrp', 'cost']:
-                if col in df.columns:
-                    price_col = col
-                    break
-            
-            # Find category column
-            cat_col = None
-            for col in ['solutions & offerings', 'solutions &amp; offerings', 'category']:
-                if col in df.columns:
-                    cat_col = col
-                    break
-            
-            for _, row in df.iterrows():
-                name = str(row.get(name_col, '')).strip() if pd.notna(row.get(name_col)) else ''
-                if not name or name.lower() == 'nan' or len(name) < 3:
-                    continue
-                
-                # Get price
-                price = 0
-                if price_col and pd.notna(row.get(price_col)):
-                    try:
-                        price_val = str(row.get(price_col)).replace(',', '').replace('Rs.', '').replace('$', '').strip()
-                        price = float(price_val) if price_val and price_val != 'nan' else 0
-                    except:
-                        price = 0
-                
-                # Get category
-                category = 'general'
-                if cat_col and pd.notna(row.get(cat_col)):
-                    cat_val = str(row.get(cat_col)).strip()
-                    if cat_val and cat_val.lower() != 'nan':
-                        category = cat_val
-                
-                # Get SKU
-                sku = str(uuid.uuid4())[:8]
-                if sku_col and pd.notna(row.get(sku_col)):
-                    sku_val = str(row.get(sku_col)).strip()
-                    if sku_val and sku_val.lower() != 'nan':
-                        sku = sku_val
-                
-                product = {
-                    "id": str(uuid.uuid4()),
-                    "name": name[:200],
-                    "description": "",
-                    "category": category,
-                    "sku": sku,
-                    "base_price": price,
-                    "tax_rate": 18,
-                    "final_price": price * 1.18 if price > 0 else 0,
-                    "stock": 0,
-                    "images": [],
-                    "specifications": {},
-                    "is_active": True,
-                    "created_at": now
-                }
-                await db.products.insert_one(product)
-                added_count += 1
-            
-            return {
-                "success": True,
-                "type": "products",
-                "added": added_count,
-                "message": f"Added {added_count} products"
-            }
-        
-        else:
-            available_cols = ', '.join(original_cols[:10])
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Excel must have columns: [title, content] for KB or [name/description, price] for products. Found: {available_cols}"
-            )
+        return {
+            "success": True,
+            "type": "knowledge_base",
+            "added": added_count,
+            "message": f"Added {added_count} KB articles from {original_filename}",
+            "source_file": original_filename
+        }
         
     except HTTPException:
         raise
