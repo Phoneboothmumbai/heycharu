@@ -2321,7 +2321,7 @@ async def inject_lead(data: LeadInjectionCreate, user: dict = Depends(get_curren
     )
     
     if product:
-        outbound_msg = f"Hi {customer['name'].split()[0]}! This is from the store. I understand you are interested in the {product['name']}. It's available at Rs.{product['base_price']:,.0f}. Would you like me to share more details about specifications and availability?"
+        outbound_msg = f"Hi {customer['name'].split()[0]}! This is from the store. I understand you are interested in the {product['name']}. It is available at Rs.{product['base_price']:,.0f}. Would you like me to share more details about specifications and availability?"
     else:
         outbound_msg = f"Hi {customer['name'].split()[0]}! This is from the store. I understand you are interested in {data.product_interest}. I'd be happy to help you with the details. What specifically would you like to know?"
     
@@ -3975,7 +3975,7 @@ async def inject_lead_internal(customer_name: str, phone: str, product_interest:
 Thanks for reaching out to {store_name}!
 
 I see you are interested in the {product['name']}.
-It's available at Rs.{product['base_price']:,.0f}.
+It is available at Rs.{product['base_price']:,.0f}.
 
 How can I help you today—more details, availability, or anything else?"""
     elif product_interest and product_interest != "General Inquiry":
