@@ -16,6 +16,52 @@ Sales Brain is a SaaS platform that acts as a central brain for customer intelli
 - ✅ Knowledge Base (FAQs, Policies)
 - ✅ Escalation System
 
+### Unanswered Questions Page (NEW - Feb 2026)
+Dashboard to manage questions the AI couldn't answer:
+
+**Features:**
+- ✅ View all escalated/unanswered questions
+- ✅ Stats cards: Pending, Overdue, Resolved, Irrelevant counts
+- ✅ Filter by status (Pending, Resolved, Irrelevant, All)
+- ✅ Unique Escalation Codes (ESC01, ESC02, ESC03...)
+- ✅ Status badges: WAITING (orange), OVERDUE (red), RESOLVED (green)
+- ✅ **Add KB Article** - Create new knowledge base article to answer the question
+- ✅ **Link KB/Excel** - Search and link existing KB articles or product data
+- ✅ **Mark Irrelevant** - Mark spam/irrelevant questions
+
+**API Endpoints:**
+- `GET /api/unanswered-questions` - List with filters (status, relevance)
+- `PUT /api/unanswered-questions/{id}/relevance` - Mark relevant/irrelevant
+- `POST /api/unanswered-questions/{id}/add-kb-article` - Create & link KB article
+- `POST /api/unanswered-questions/{id}/link-kb-article/{kb_id}` - Link existing KB
+- `POST /api/unanswered-questions/{id}/link-excel-data` - Search KB/products/Excel
+
+### Multiple Escalation Thread Mapping (NEW - Feb 2026)
+Strict one-to-one mapping between customer questions and owner replies:
+
+**Escalation ID System:**
+- Unique codes: ESC01, ESC02, ESC03... (auto-incrementing)
+- Sent to owner with each escalation message
+- Owner must reply with format: `ESC01: your answer here`
+
+**Thread Mapping Rules:**
+- Each question → own escalation ID
+- Each escalation ID → mapped to specific owner reply
+- No ID match = no response sent to customer
+- If multiple pending escalations, owner must specify which one
+
+**Example Owner WhatsApp Flow:**
+```
+🚨 *ESC01* - Need Your Input
+Customer: John Doe
+Phone: 9876543210
+Question: "Do you have iPhone 15 Pro Max in stock?"
+---
+Reply with: *ESC01: your answer*
+```
+Owner replies: `ESC01: Yes, we have it for ₹1,39,900`
+AI polishes and sends to customer.
+
 ### 4-Part AI Control System (NEW - Feb 2026)
 Complete AI conversation control with strict decision logic:
 
