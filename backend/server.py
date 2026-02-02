@@ -1661,7 +1661,7 @@ async def upload_excel_to_kb(file: UploadFile = File(...), user: dict = Depends(
         raise HTTPException(status_code=500, detail=f"Failed to process Excel: {str(e)}")
 
 def parse_strict_xlsx(file_bytes):
-    """Parse strict conformance XLSX files that openpyxl can't handle (like Apple price lists)"""
+    """Parse strict conformance XLSX files that openpyxl cannot handle (like Apple price lists)"""
     import zipfile
     import re
     import pandas as pd
