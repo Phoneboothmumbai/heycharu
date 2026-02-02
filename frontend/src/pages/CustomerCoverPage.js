@@ -248,6 +248,114 @@ const CustomerCoverPage = () => {
     }
   };
 
+  // === NEW HANDLERS FOR ENHANCED FEATURES ===
+  
+  const saveCustomerDetails = async () => {
+    try {
+      await axios.put(`${API_URL}/api/customers/${customerId}/details`, {
+        ...customerDetails,
+        payment_preferences: paymentPrefs
+      });
+      toast.success("Customer details updated");
+      setEditingDetails(false);
+      fetchData();
+    } catch (err) {
+      toast.error("Failed to update details");
+    }
+  };
+
+  const addAddress = async () => {
+    if (!addressForm.line1 || !addressForm.city) {
+      toast.error("Please fill in address line and city");
+      return;
+    }
+    try {
+      await axios.post(`${API_URL}/api/customers/${customerId}/addresses`, addressForm);
+      toast.success("Address added");
+      setIsAddAddressOpen(false);
+      setAddressForm({ label: "", line1: "", line2: "", city: "", state: "", pincode: "", is_primary: false });
+      fetchData();
+    } catch (err) {
+      toast.error("Failed to add address");
+    }
+  };
+
+  const removeAddress = async (addressId) => {
+    if (!window.confirm("Remove this address?")) return;
+    try {
+      await axios.delete(`${API_URL}/api/customers/${customerId}/addresses/${addressId}`);
+      toast.success("Address removed");
+      fetchData();
+    } catch (err) {
+      toast.error("Failed to remove address");
+    }
+  };
+
+  const addNote = async () => {
+    if (!newNoteContent.trim()) {
+      toast.error("Please enter note content");
+      return;
+    }
+    try {
+      await axios.post(`${API_URL}/api/customers/${customerId}/notes?content=${encodeURIComponent(newNoteContent)}`);
+      toast.success("Note added");
+      setIsAddNoteOpen(false);
+      setNewNoteContent("");
+      fetchData();
+    } catch (err) {
+      toast.error("Failed to add note");
+    }
+  };
+
+  const deleteNote = async (noteId) => {
+    if (!window.confirm("Delete this note?")) return;
+    try {
+      await axios.delete(`${API_URL}/api/customers/${customerId}/notes/${noteId}`);
+      toast.success("Note deleted");
+      fetchData();
+    } catch (err) {
+      toast.error("Failed to delete note");
+    }
+  };
+
+  const uploadInvoice = async () => {
+    if (!invoiceFile) {
+      toast.error("Please select a file");
+      return;
+    }
+    try {
+      const formData = new FormData();
+      formData.append("file", invoiceFile);
+      formData.append("description", invoiceDescription);
+      
+      await axios.post(`${API_URL}/api/customers/${customerId}/invoices?description=${encodeURIComponent(invoiceDescription)}`, formData, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
+      toast.success("Invoice uploaded");
+      setIsUploadInvoiceOpen(false);
+      setInvoiceFile(null);
+      setInvoiceDescription("");
+      fetchData();
+    } catch (err) {
+      toast.error("Failed to upload invoice");
+    }
+  };
+
+  const deleteInvoice = async (invoiceId) => {
+    if (!window.confirm("Delete this invoice?")) return;
+    try {
+      await axios.delete(`${API_URL}/api/customers/${customerId}/invoices/${invoiceId}`);
+      toast.success("Invoice deleted");
+      fetchData();
+    } catch (err) {
+      toast.error("Failed to delete invoice");
+    }
+  };
+
+  const downloadInvoice = (invoiceId, filename) => {
+    window.open(`${API_URL}/api/customers/${customerId}/invoices/${invoiceId}`, "_blank");
+  };
+
   if (loading) {
     return (
       <div className="space-y-6">
