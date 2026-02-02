@@ -1973,7 +1973,7 @@ async def get_unanswered_questions(status: Optional[str] = None, relevance: Opti
 async def mark_question_relevance(question_id: str, relevance: str, user: dict = Depends(get_current_user)):
     """Mark a question as relevant or irrelevant.
     
-    Irrelevant questions won't trigger future escalations for similar queries.
+    Irrelevant questions will not trigger future escalations for similar queries.
     """
     if relevance not in ["relevant", "irrelevant"]:
         raise HTTPException(status_code=400, detail="Invalid relevance value. Use 'relevant' or 'irrelevant'")
@@ -3296,7 +3296,7 @@ def normalize_phone(phone: str) -> tuple:
     # If 10 digits, assume India
     elif len(clean) == 10:
         clean = '91' + clean
-    # If doesn't start with 91, prefix it
+    # If does not start with 91, prefix it
     elif not clean.startswith('91') and len(clean) >= 10:
         clean = '91' + clean[-10:]
     
@@ -3585,7 +3585,7 @@ Write the polished reply:"""
             ).to_list(10)
             
             if pending_escalations and not data.message.lower().startswith(("customer", "lead", "inject")):
-                # There are pending escalations but owner didn't specify which one
+                # There are pending escalations but owner did not specify which one
                 if len(pending_escalations) == 1:
                     # Only one pending - assume it's for that one (backward compatible)
                     target_escalation = pending_escalations[0]
@@ -3770,7 +3770,7 @@ Write the polished reply:"""
             msg_lower = data.message.lower()
             
             # Repair keywords
-            repair_keywords = ["repair", "fix", "broken", "not working", "broke", "damage", "crack", "issue", "problem", "dead", "won't turn on", "screen"]
+            repair_keywords = ["repair", "fix", "broken", "not working", "broke", "damage", "crack", "issue", "problem", "dead", "will not turn on", "screen"]
             # Sales keywords
             sales_keywords = ["buy", "price", "cost", "purchase", "want to get", "looking for", "interested in", "available", "how much"]
             
