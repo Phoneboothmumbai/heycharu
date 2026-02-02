@@ -228,6 +228,20 @@ ai_uncertain: "Let me check this and get back to you shortly."
 
 ## Changelog
 
+### February 2, 2026 (Session 6)
+- **NEW**: AI Behavior Policy Engine - Complete configurable AI rules system
+  - Frontend settings page at `/ai-policy` with tabbed interface
+  - **Global Rules Tab**: Allowed topics, disallowed behaviors, out-of-scope message
+  - **States Tab**: GREETING, INTENT_COLLECTION, ACTION, CLOSURE, ESCALATION states
+  - **Response Tab**: Greeting limit, question limit, max length, tone, language, emoji usage
+  - **Fallback Tab**: Unclear data, out-of-scope, system error handling
+  - **Triggers Tab**: Lead inject trigger configuration
+  - Master toggle to enable/disable policy enforcement
+  - Save Policy and Reset to Defaults functionality
+  - Backend API: GET/PUT `/api/ai-policy`, section updates, state updates, reset
+  - Backend uses policy in `generate_ai_reply()` function for AI responses
+  - 21 backend API tests (all passing)
+
 ### February 2, 2026 (Session 5)
 - **NEW**: Unanswered Questions Page
   - Dashboard to view all escalated questions
