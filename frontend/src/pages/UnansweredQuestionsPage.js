@@ -113,14 +113,20 @@ const UnansweredQuestionsPage = () => {
     try {
       const token = localStorage.getItem("sales-brain-token");
       await axios.post(
-        `${API_URL}/api/unanswered-questions/${selectedQuestion.id}/add-kb-article?title=${encodeURIComponent(newArticle.title)}&content=${encodeURIComponent(newArticle.content)}&category=${newArticle.category}`,
-        {},
+        `${API_URL}/api/unanswered-questions/${selectedQuestion.id}/add-kb-article`,
+        {
+          title: newArticle.title,
+          content: newArticle.content,
+          category: newArticle.category,
+          tags: []
+        },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       toast.success("KB article created and linked!");
       setShowAddKbDialog(false);
       setNewArticle({ title: "", content: "", category: "FAQ" });
       fetchQuestions();
+      fetchStats();
     } catch (error) {
       toast.error("Failed to create KB article");
     }
