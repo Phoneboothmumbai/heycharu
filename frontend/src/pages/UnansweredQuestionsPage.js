@@ -70,7 +70,7 @@ const UnansweredQuestionsPage = () => {
 
   const handleMarkRelevance = async (questionId, relevance) => {
     try {
-      const token = localStorage.getItem("auth_token");
+      const token = localStorage.getItem("sales-brain-token");
       await axios.put(`${API_URL}/api/unanswered-questions/${questionId}/relevance?relevance=${relevance}`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
