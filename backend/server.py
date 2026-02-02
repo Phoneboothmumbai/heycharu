@@ -590,6 +590,78 @@ async def create_escalation(customer_id: str, conversation_id: str, reason: str,
     
     return escalation
 
+# ============== AI INSIGHTS EXTRACTION ==============
+
+async def extract_and_store_ai_insights(customer_id: str, message: str, ai_response: str):
+    """Extract insights from customer messages and store them.
+    
+    Collects: product interests, preferences, budget mentions, issues, sentiments
+    """
+    try:
+        # Get current insights
+        customer = await db.customers.find_one({"id": customer_id}, {"_id": 0, "ai_insights": 1})
+        current_insights = customer.get("ai_insights", {}) if customer else {}
+        
+        # Initialize structure
+        if "product_interests" not in current_insights:
+            current_insights["product_interests"] = []
+        if "mentioned_issues" not in current_insights:
+            current_insights["mentioned_issues"] = []
+        if "preferences" not in current_insights:
+            current_insights["preferences"] = {}
+        if "interaction_count" not in current_insights:
+            current_insights["interaction_count"] = 0
+        
+        # Update interaction count
+        current_insights["interaction_count"] += 1
+        current_insights["last_interaction"] = datetime.now(timezone.utc).isoformat()
+        
+        # Simple keyword extraction for product interests
+        message_lower = message.lower()
+        product_keywords = [
+            "iphone", "ipad", "mac", "macbook", "airpods", "apple watch", 
+            "imac", "mac mini", "mac pro", "samsung", "dell", "hp", "lenovo",
+            "laptop", "desktop", "monitor", "printer", "keyboard", "mouse"
+        ]
+        
+        for keyword in product_keywords:
+            if keyword in message_lower and keyword not in current_insights["product_interests"]:
+                current_insights["product_interests"].append(keyword)
+        
+        # Detect budget mentions
+        import re
+        budget_pattern = r'budget.*?(\d+[,\d]*)|(\d+[,\d]*)\s*(k|lakh|lac|rupee|rs)'
+        budget_match = re.search(budget_pattern, message_lower)
+        if budget_match:
+            current_insights["preferences"]["budget_mentioned"] = True
+            current_insights["preferences"]["last_budget_mention"] = message[:100]
+        
+        # Detect issue mentions
+        issue_keywords = ["broken", "not working", "repair", "fix", "problem", "issue", "help", "error", "stuck", "slow"]
+        for keyword in issue_keywords:
+            if keyword in message_lower:
+                if keyword not in current_insights["mentioned_issues"]:
+                    current_insights["mentioned_issues"].append(keyword)
+                current_insights["preferences"]["needs_support"] = True
+                break
+        
+        # Detect preferences
+        if "urgent" in message_lower or "asap" in message_lower or "fast" in message_lower:
+            current_insights["preferences"]["urgency"] = "high"
+        if "delivery" in message_lower:
+            current_insights["preferences"]["interested_in_delivery"] = True
+        if "emi" in message_lower or "installment" in message_lower:
+            current_insights["preferences"]["interested_in_emi"] = True
+        
+        # Store updated insights
+        await db.customers.update_one(
+            {"id": customer_id},
+            {"$set": {"ai_insights": current_insights}}
+        )
+        
+    except Exception as e:
+        logger.error(f"Error extracting AI insights: {e}")
+
 # ============== EXCLUDED NUMBERS HELPERS ==============
 
 async def is_number_excluded(phone: str) -> bool:
