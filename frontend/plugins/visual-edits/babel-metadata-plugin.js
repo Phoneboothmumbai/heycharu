@@ -643,6 +643,7 @@ const babelMetadataPlugin = ({ types: t }) => {
 
         if (arrayContext && arrayContext.itemParam === rootName) {
           // This is item.property where item comes from array.map(item => ...)
+          recursionDepth--;
           return {
             type: "static-imported",
           varName: arrayContext.arrayVar,
