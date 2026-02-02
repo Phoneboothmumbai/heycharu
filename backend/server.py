@@ -932,19 +932,39 @@ Just reply with your answer - I'll format and send it to them."""
         # Send to owner
         await send_whatsapp_message(owner_phone, escalation_msg)
         
-        # Store escalation for tracking
+        # Calculate SLA deadline (30 minutes from now)
+        now = datetime.now(timezone.utc)
+        sla_deadline = (now + timedelta(minutes=30)).isoformat()
+        escalation_id = str(uuid.uuid4())
+        
+        # Store escalation for tracking with SLA info
         await db.escalations.insert_one({
-            "id": str(uuid.uuid4()),
+            "id": escalation_id,
             "customer_id": customer.get("id") if customer else None,
             "customer_phone": customer_phone,
             "customer_name": customer_name,
             "reason": error_reason,
             "customer_message": customer_message,
             "status": "pending_owner_reply",
-            "created_at": datetime.now(timezone.utc).isoformat()
+            "sla_deadline": sla_deadline,
+            "sla_reminders_sent": 0,
+            "created_at": now.isoformat()
         })
         
-        logger.info(f"Escalation sent to owner for customer: {customer_phone}")
+        # Also update the conversation with escalation status
+        if customer:
+            await db.conversations.update_one(
+                {"customer_id": customer.get("id")},
+                {"$set": {
+                    "status": "waiting_for_owner",
+                    "escalated_at": now.isoformat(),
+                    "escalation_reason": error_reason,
+                    "sla_deadline": sla_deadline,
+                    "sla_reminders_sent": 0
+                }}
+            )
+        
+        logger.info(f"Escalation sent to owner for customer: {customer_phone}, SLA deadline: {sla_deadline}")
         
     except Exception as e:
         logger.error(f"Failed to escalate to owner: {e}")
