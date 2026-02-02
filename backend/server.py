@@ -2590,7 +2590,7 @@ async def update_customer_tags(customer_id: str, tags: List[str], user: dict = D
 
 @api_router.post("/customers/{customer_id}/devices")
 async def add_customer_device(customer_id: str, device: Dict[str, Any], user: dict = Depends(get_current_user)):
-    """Add a device to customer's device list"""
+    """Add a device to customer device list"""
     result = await db.customers.update_one(
         {"id": customer_id},
         {"$push": {"devices": {**device, "added_at": datetime.now(timezone.utc).isoformat()}}}
@@ -2601,7 +2601,7 @@ async def add_customer_device(customer_id: str, device: Dict[str, Any], user: di
 
 @api_router.delete("/customers/{customer_id}/devices/{device_index}")
 async def remove_customer_device(customer_id: str, device_index: int, user: dict = Depends(get_current_user)):
-    """Remove a device from customer's device list by index"""
+    """Remove a device from customer device list by index"""
     customer = await db.customers.find_one({"id": customer_id}, {"_id": 0})
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
@@ -3142,7 +3142,7 @@ async def update_ticket_status(ticket_id: str, status: str, user: dict = Depends
     await db.tickets.update_one({"id": ticket_id}, {"$set": {"status": status}})
     
     # AUTO-MESSAGE: Ticket status updates
-    # Find the customer's conversation
+    # Find the customer conversation
     order = await db.orders.find_one({"ticket_id": ticket_id}, {"_id": 0})
     if order and order.get("conversation_id"):
         if status == "in_progress" and old_status != "in_progress":
@@ -3534,7 +3534,7 @@ Write the polished reply:"""
                         }}
                     )
                     
-                    # Save message in customer's conversation
+                    # Save message in customer conversation
                     conv = await db.conversations.find_one(
                         {"customer_phone": {"$regex": customer_phone[-10:]}},
                         {"_id": 0}
