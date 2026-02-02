@@ -1083,6 +1083,9 @@ Your reply (short, human, friendly):"""
             {"$set": {"status": "active", "last_ai_response": datetime.now(timezone.utc).isoformat()}}
         )
         
+        # Extract and store AI insights from this conversation
+        await extract_and_store_ai_insights(customer_id, message, response)
+        
         return response
         
     except Exception as e:
