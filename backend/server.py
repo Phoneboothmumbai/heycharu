@@ -908,6 +908,28 @@ Devices: {', '.join([d.get('model', '') for d in customer.get('devices', [])[:3]
         is_closure_message = simple_message in closure_triggers
         closure_templates = closure_state.get("templates", {})
         
+        # ========== DETECT CONFIRMATION AFTER "LET ME CHECK" ==========
+        # If last AI message was "let me check pricing" and customer says "sure/ok/yes", ESCALATE immediately
+        confirmation_words = ["sure", "ok", "okay", "yes", "yeah", "yep", "go ahead", "please", "please do", "alright", "fine", "pricing"]
+        is_confirmation = simple_message in confirmation_words or any(w in simple_message for w in confirmation_words)
+        
+        last_ai_message = ""
+        if past_messages:
+            for m in past_messages:  # Already sorted desc
+                if m.get('sender_type') == 'ai':
+                    last_ai_message = m.get('content', '').lower()
+                    break
+        
+        # Check if last AI message indicated "checking" something
+        checking_patterns = ["let me check", "allow me a moment", "checking", "i'll confirm", "will get back", "need to verify"]
+        ai_was_checking = any(p in last_ai_message for p in checking_patterns)
+        
+        if is_confirmation and ai_was_checking:
+            logger.info(f"Customer confirmed after AI checking - escalating immediately")
+            # Escalate now
+            await escalate_to_owner(customer, conversation_history, message, f"Customer confirmed - needs pricing/info")
+            return "Got it! Let me get that information for you - will update shortly."
+        
         # Check if this is the FIRST message or a fresh greeting
         is_first_message = len(past_messages) == 0
         
