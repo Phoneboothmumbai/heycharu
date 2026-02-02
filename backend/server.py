@@ -949,6 +949,16 @@ Your response:""""""
         
         # ========== STEP 4: ESCALATE OR RESPOND ==========
         if needs_escalation:
+            # Check if this is a simple greeting - don't escalate those
+            if is_simple_greeting:
+                logger.info(f"Skipping escalation for simple greeting: {message}")
+                return f"Hi! How can I help you today?"
+            
+            # Check if there's already a pending escalation for this customer
+            if pending_escalation:
+                logger.info(f"Skipping escalation - already pending: {pending_escalation.get('escalation_code')}")
+                return "I'm still checking on your earlier question. I'll have an answer for you shortly. Is there anything else I can help with in the meantime?"
+            
             logger.info(f"ESCALATING: {escalation_reason}")
             
             # Update conversation status
