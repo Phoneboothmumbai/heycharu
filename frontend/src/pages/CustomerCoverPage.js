@@ -7,13 +7,16 @@ import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
 import { Textarea } from "../components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "../components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
+import { Label } from "../components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { toast } from "sonner";
 import { 
   ArrowLeft, Phone, Mail, MapPin, IndianRupee, ShoppingCart, 
   MessageSquare, AlertTriangle, Tag, Plus, X, Smartphone, Clock, 
-  CheckCircle, AlertCircle, Ticket, User, Edit2, Save, EyeOff
+  CheckCircle, AlertCircle, Ticket, User, Edit2, Save, EyeOff,
+  FileText, Upload, Brain, CreditCard, Building, Trash2, StickyNote
 } from "lucide-react";
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
