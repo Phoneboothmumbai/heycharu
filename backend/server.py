@@ -1102,7 +1102,12 @@ Your reply:"""
             r"\bprobably\b",
             r"\bmight be\b",
             r"\bcould be around\b",
-            r"\bapproximately\b"
+            r"\bapproximately\b",
+            r"\bsku\b",
+            r"\bproduct code\b",
+            r"\bitem code\b",
+            r"\bmodel number\b",
+            r"\bpart number\b"
         ]
         
         for pattern in forbidden_patterns:
