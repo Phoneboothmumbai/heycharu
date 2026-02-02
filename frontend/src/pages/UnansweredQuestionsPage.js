@@ -41,8 +41,8 @@ const UnansweredQuestionsPage = () => {
       const token = localStorage.getItem("auth_token");
       let url = `${API_URL}/api/unanswered-questions`;
       const params = new URLSearchParams();
-      if (filterStatus) params.append("status", filterStatus);
-      if (filterRelevance) params.append("relevance", filterRelevance);
+      if (filterStatus && filterStatus !== "all") params.append("status", filterStatus);
+      if (filterRelevance && filterRelevance !== "all") params.append("relevance", filterRelevance);
       if (params.toString()) url += `?${params.toString()}`;
       
       const response = await axios.get(url, {
