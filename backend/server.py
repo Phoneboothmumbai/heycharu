@@ -938,7 +938,7 @@ Tags: {', '.join(customer.get('tags', [])) or 'None'}
         
         # ========== DETECT CONFIRMATION AFTER "LET ME CHECK" ==========
         # If last AI message was "let me check pricing" and customer says "sure/ok/yes", ESCALATE immediately
-        confirmation_words = ["sure", "ok", "okay", "yes", "yeah", "yep", "go ahead", "please", "please do", "alright", "fine", "pricing"]
+        confirmation_words = ["sure", "ok", "okay", "yes", "yeah", "yep", "go ahead", "please", "please do", "alright", "fine", "pricing", "both", "all", "dono", "donon"]
         is_confirmation = simple_message in confirmation_words or any(w in simple_message for w in confirmation_words)
         
         last_ai_message = ""
@@ -948,15 +948,18 @@ Tags: {', '.join(customer.get('tags', [])) or 'None'}
                     last_ai_message = m.get('content', '').lower()
                     break
         
-        # Check if last AI message indicated "checking" something
-        checking_patterns = ["let me check", "allow me a moment", "checking", "i'll confirm", "will get back", "need to verify"]
+        # Check if last AI message indicated "checking" something or asking about product
+        checking_patterns = ["let me check", "allow me a moment", "checking", "i'll confirm", "will get back", "need to verify", "stock check", "time do", "confirm kar", "check kar"]
         ai_was_checking = any(p in last_ai_message for p in checking_patterns)
         
-        if is_confirmation and ai_was_checking:
-            logger.info(f"Customer confirmed after AI checking - escalating immediately")
+        # Also check if AI asked a question about product variant
+        ai_asked_variant = any(p in last_ai_message for p in ["lightning", "usb-c", "which one", "konsa", "kaun sa", "variant"])
+        
+        if is_confirmation and (ai_was_checking or ai_asked_variant):
+            logger.info(f"Customer confirmed after AI question - escalating immediately: {message}")
             # Escalate now
-            await escalate_to_owner(customer, conversation_history, message, f"Customer confirmed - needs pricing/info")
-            return "Got it! Let me get that information for you - will update shortly."
+            await escalate_to_owner(customer, conversation_history, message, f"Customer confirmed '{message}' - needs stock/pricing info")
+            return "Perfect! Checking both for you - will share details shortly."
         
         # Check if this is the FIRST message or a fresh greeting
         is_first_message = len(past_messages) == 0
