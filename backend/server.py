@@ -658,178 +658,213 @@ def parse_lead_injection_command(message: str) -> Optional[Dict]:
 # ============== AI AUTO-REPLY HELPERS ==============
 
 async def generate_ai_reply(customer_id: str, conversation_id: str, message: str, retry_count: int = 0) -> str:
-    """Generate AI reply for a customer message - CONTEXT-AWARE SYSTEM with retry and escalation"""
+    """Generate AI reply for a customer message - STRICT FLOW CONTROL SYSTEM"""
     try:
+        import re
+        
         # Load customer context
         customer = await db.customers.find_one({"id": customer_id}, {"_id": 0})
         if not customer:
             return None
         
-        # Load settings for AI instructions
+        # Load settings
         settings = await db.settings.find_one({"type": "global"}, {"_id": 0})
         ai_instructions = settings.get("ai_instructions", "") if settings else ""
         business_name = settings.get("business_name", "NeoStore") if settings else "NeoStore"
         
-        # STEP 1: Get customer profile and history
-        customer_history = await db.messages.find(
+        # ========== STEP 1: CONTEXT FETCH ==========
+        # Fetch customer profile
+        customer_profile = f"""
+Name: {customer.get('name', 'Unknown')}
+Phone: {customer.get('phone', 'Unknown')}
+Type: {customer.get('customer_type', 'individual')}
+Tags: {', '.join(customer.get('tags', []))}
+Notes: {customer.get('notes', '')[:200]}
+Devices: {', '.join([d.get('model', '') for d in customer.get('devices', [])[:3]])}
+"""
+        
+        # Fetch past enquiries (conversation history)
+        past_messages = await db.messages.find(
             {"conversation_id": conversation_id},
             {"_id": 0}
         ).sort("created_at", -1).limit(20).to_list(20)
         
-        # Build conversation history
-        history_lines = []
-        for m in reversed(customer_history):
-            sender = "Customer" if m.get("sender_type") == "customer" else "Assistant"
-            content = m.get("content", "")[:200]
-            history_lines.append(f"{sender}: {content}")
-        conversation_history = "\n".join(history_lines) if history_lines else "No previous messages"
+        conversation_history = "\n".join([
+            f"{'Customer' if m.get('sender_type') == 'customer' else 'Assistant'}: {m.get('content', '')[:150]}"
+            for m in reversed(past_messages)
+        ]) if past_messages else "No previous messages"
         
-        # Get customer preferences and past enquiries
-        customer_context = f"""
-Customer Name: {customer.get('name', 'Unknown')}
-Phone: {customer.get('phone', 'Unknown')}
-Customer Type: {customer.get('customer_type', 'individual')}
-Tags: {', '.join(customer.get('tags', []))}
-Notes: {customer.get('notes', '')[:200]}
-Past Devices: {', '.join([d.get('model', '') for d in customer.get('devices', [])[:3]])}
-"""
+        # ========== STEP 2: KNOWLEDGE LOOKUP ==========
+        # Search KB
+        kb_articles = await db.knowledge_base.find(
+            {"is_active": True}, 
+            {"_id": 0, "title": 1, "content": 1, "category": 1}
+        ).to_list(50)
+        kb_content = "\n\n".join([
+            f"[{kb.get('category', 'general').upper()}] {kb['title']}:\n{kb['content'][:500]}"
+            for kb in kb_articles
+        ]) if kb_articles else ""
         
-        # STEP 2: Knowledge Lookup - KB articles
-        kb_articles = await db.knowledge_base.find({"is_active": True}, {"_id": 0, "title": 1, "content": 1, "category": 1}).to_list(50)
-        kb_content = ""
-        if kb_articles:
-            kb_content = "\n\n".join([f"[{kb.get('category', 'general').upper()}] {kb['title']}:\n{kb['content'][:600]}" for kb in kb_articles])
+        # Search Products (Excel/Database)
+        products = await db.products.find(
+            {"is_active": True}, 
+            {"_id": 0, "name": 1, "base_price": 1, "category": 1, "sku": 1}
+        ).to_list(200)
+        product_catalog = "\n".join([
+            f"• {p['name']}: ₹{p.get('base_price', 0):,.0f}"
+            for p in products
+        ]) if products else ""
         
-        # STEP 2: Knowledge Lookup - Products (from Excel/database)
-        products = await db.products.find({"is_active": True}, {"_id": 0, "name": 1, "base_price": 1, "category": 1, "sku": 1}).to_list(200)
-        product_catalog = ""
-        if products:
-            product_catalog = "\n".join([f"- {p['name']}: ₹{p.get('base_price', 0):,.0f} (SKU: {p.get('sku', 'N/A')})" for p in products])
+        # Check if we have ANY verified sources
+        has_kb = len(kb_articles) > 0
+        has_products = len(products) > 0
+        source_verified = has_kb or has_products
         
-        # Get active topic
-        active_topic = await db.topics.find_one(
-            {"customer_id": customer_id, "status": {"$in": ["open", "in_progress"]}},
-            {"_id": 0},
-            sort=[("created_at", -1)]
-        )
-        topic_info = f"Active Topic: {active_topic.get('title', 'General')}" if active_topic else ""
-        
-        # Build the system prompt with STRICT FLOW CONTROL
-        system_prompt = f"""ROLE: You are a Customer Support Assistant for {business_name}.
-You must respond ONLY using approved sources and strictly follow the defined flow.
+        # ========== STEP 3: DECISION LOGIC ==========
+        system_prompt = f"""ROLE: Customer Support Assistant for {business_name}
+STRICT MODE: You can ONLY use verified sources. NO guessing.
 
-{f"BUSINESS INSTRUCTIONS:{chr(10)}{ai_instructions}" if ai_instructions else ""}
+{f"BUSINESS RULES:{chr(10)}{ai_instructions}" if ai_instructions else ""}
 
 === CUSTOMER PROFILE ===
-{customer_context}
-{topic_info}
+{customer_profile}
 
 === CONVERSATION HISTORY ===
 {conversation_history}
 
-=== KNOWLEDGE BASE ===
-{kb_content if kb_content else "No KB articles available."}
+=== VERIFIED SOURCES ===
 
-=== PRODUCT CATALOG ===
-{product_catalog if product_catalog else "No products in catalog."}
+KNOWLEDGE BASE:
+{kb_content if kb_content else "[EMPTY - No KB articles]"}
 
-=== DECISION LOGIC (FOLLOW EXACTLY) ===
+PRODUCT CATALOG:
+{product_catalog if product_catalog else "[EMPTY - No products]"}
 
-STEP 1: Check if the answer exists in:
-- Knowledge Base (above)
-- Product Catalog (above)
-- Customer context/history
+=== STRICT DECISION TREE ===
 
+STEP 1: Search for answer in KB and Product Catalog above
 STEP 2: Make decision:
 
-IF answer IS FOUND in KB/Catalog/Context:
-→ Reply with accurate, professional, to-the-point response
-→ Use prices EXACTLY as shown in catalog
-→ Keep response short (2-3 sentences)
+✅ IF answer FOUND in sources above:
+   → Reply with EXACT information from sources
+   → Use EXACT prices from catalog
+   → Be professional and concise (2-3 sentences)
 
-IF answer IS NOT FOUND:
-→ Reply with EXACTLY: "NOT_FOUND: [brief description of what's needed]"
-→ Do NOT guess or make up information
-→ Do NOT ask clarifying questions
-→ Do NOT say "I don't have that information"
+❌ IF answer NOT FOUND in sources:
+   → Reply ONLY: "ESCALATE_REQUIRED"
+   → Do NOT guess or assume
+   → Do NOT give partial answers
 
-=== STRICT RULES ===
-- ❌ No guessing or assumptions
-- ❌ No replies outside Apple products, repairs, IT products, IT services
-- ❌ No random responses
-- ❌ No repeated questions
-- ❌ No self-generated prices or specs
-- ✅ Use ONLY data from KB and Product Catalog
-- ✅ Be accurate, professional, concise
+=== FORBIDDEN RESPONSES (BLOCKED) ===
+❌ "I think..."
+❌ "Usually..."
+❌ "Estimated..."
+❌ "Most likely..."
+❌ "Based on experience..."
+❌ "You can consider..."
+❌ "I don't have that information" (use ESCALATE_REQUIRED instead)
+❌ "Let me check" (use ESCALATE_REQUIRED instead)
 
-Customer's new message: "{message}"
+=== SCOPE LIMIT ===
+Only answer about: Apple products, repairs, IT products, IT services
+For anything else: "I can help only with Apple products, repairs, and IT products or services."
 
-Your reply (use KB/Catalog data, or say "NOT_FOUND: [reason]" if info missing):"""
+Customer's message: "{message}"
+
+Your response (use sources OR say "ESCALATE_REQUIRED"):"""
 
         # Generate response
         chat = LlmChat(
             api_key=EMERGENT_LLM_KEY,
             session_id=f"conv-{conversation_id}",
-            system_message="You are a customer support assistant. Follow instructions exactly."
+            system_message="You are a strict customer support assistant. Follow decision tree exactly. No guessing."
         ).with_model("openai", "gpt-5.2")
         
-        user_msg = UserMessage(text=system_prompt)
-        response = await chat.send_message(user_msg)
+        response = await chat.send_message(UserMessage(text=system_prompt))
         
-        # Check if response is empty
+        # ========== STEP 3: RESPONSE VALIDATION ==========
         if not response or len(response.strip()) == 0:
-            logger.warning(f"AI returned empty response for message: {message[:50]}")
             if retry_count < 1:
                 return await generate_ai_reply(customer_id, conversation_id, message, retry_count + 1)
             await escalate_to_owner(customer, conversation_history, message, "AI returned empty response")
             return "Let me check this and get back to you."
         
-        import re
-        
-        # Check for NOT_FOUND or ESCALATE patterns
+        # Check for ESCALATE_REQUIRED or similar patterns
         needs_escalation = False
         escalation_reason = ""
         
-        # Detect explicit escalation markers
-        if "NOT_FOUND:" in response.upper() or "ESCALATE:" in response.upper():
-            needs_escalation = True
-            match = re.search(r'(NOT_FOUND|ESCALATE):\s*(.+?)(?:\n|$)', response, re.IGNORECASE)
-            escalation_reason = match.group(2).strip() if match else f"Customer query: {message[:50]}"
+        # Direct escalation markers
+        escalation_markers = ["ESCALATE_REQUIRED", "ESCALATE:", "NOT_FOUND:"]
+        for marker in escalation_markers:
+            if marker in response.upper():
+                needs_escalation = True
+                escalation_reason = f"Query: {message[:60]}"
+                break
         
-        # Detect uncertainty phrases
-        uncertainty_patterns = [
+        # Forbidden phrases that indicate guessing (BLOCK these)
+        forbidden_patterns = [
+            r"\bi think\b",
+            r"\busually\b",
+            r"\bestimated\b",
+            r"\bmost likely\b",
+            r"\bbased on experience\b",
+            r"\byou can consider\b",
+            r"\bprobably\b",
+            r"\bmight be\b",
+            r"\bcould be around\b",
+            r"\bapproximately\b"
+        ]
+        
+        for pattern in forbidden_patterns:
+            if re.search(pattern, response.lower()):
+                logger.warning(f"AI used forbidden phrase, blocking response")
+                needs_escalation = True
+                escalation_reason = f"AI attempted guess for: {message[:50]}"
+                break
+        
+        # Info-not-found patterns
+        not_found_patterns = [
             r"we don't have",
-            r"don't have the (price|pricing|info|information)",
             r"not in our (list|catalog|database)",
-            r"not available in .* (list|catalog)",
             r"no pricing",
             r"i('ll| will) need to check",
             r"let me (check|verify|confirm)",
-            r"i don't have .* information",
-            r"not listed",
-            r"couldn't find"
+            r"couldn't find",
+            r"not available",
+            r"don't have .* information"
         ]
         
-        for pattern in uncertainty_patterns:
+        for pattern in not_found_patterns:
             if re.search(pattern, response.lower()):
                 needs_escalation = True
-                escalation_reason = f"Missing info for: {message[:50]}"
+                escalation_reason = f"Missing info: {message[:50]}"
                 break
         
+        # ========== STEP 4: ESCALATE OR RESPOND ==========
         if needs_escalation:
-            logger.info(f"Escalating to owner: {escalation_reason}")
-            await escalate_to_owner(customer, conversation_history, message, escalation_reason)
-            return "Let me check this and get back to you."
-        
-        # Update topic if exists
-        if active_topic:
-            await db.topics.update_one(
-                {"id": active_topic["id"]},
+            logger.info(f"ESCALATING: {escalation_reason}")
+            
+            # Update conversation status
+            await db.conversations.update_one(
+                {"id": conversation_id},
                 {"$set": {
-                    "last_customer_message": message,
-                    "updated_at": datetime.now(timezone.utc).isoformat()
+                    "status": "escalated",
+                    "escalated_at": datetime.now(timezone.utc).isoformat(),
+                    "escalation_reason": escalation_reason
                 }}
             )
+            
+            # Send escalation to owner
+            await escalate_to_owner(customer, conversation_history, message, escalation_reason)
+            
+            # ONLY allowed response when escalating
+            return "Let me check this and get back to you."
+        
+        # Update conversation status to FOUND
+        await db.conversations.update_one(
+            {"id": conversation_id},
+            {"$set": {"status": "active", "last_ai_response": datetime.now(timezone.utc).isoformat()}}
+        )
         
         return response
         
