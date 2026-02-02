@@ -845,14 +845,42 @@ async def generate_ai_reply(customer_id: str, conversation_id: str, message: str
         logger.info(f"AI Policy Scan - Enabled: {policy_enabled}, Topics: {len(global_rules.get('allowed_topics', []))}, States: {len(states_config)}, Response Rules: {len(response_rules)}")
         
         # ========== STEP 1: CONTEXT FETCH ==========
-        # Fetch customer profile
+        # Fetch customer profile with ALL 360° data
+        addresses = customer.get('addresses', [])
+        addresses_str = "\n".join([
+            f"  - {addr.get('type', 'Address').title()}: {addr.get('address', addr.get('full_address', 'N/A'))}"
+            for addr in addresses
+        ]) if addresses else "  No addresses on file"
+        
+        devices = customer.get('devices', [])
+        devices_str = ", ".join([d.get('model', d.get('type', '')) for d in devices[:5]]) if devices else "None"
+        
+        payment_prefs = customer.get('payment_preferences', {})
+        payment_str = f"Preferred: {payment_prefs.get('preferred_method', 'Not set')}, UPI: {payment_prefs.get('upi_id', 'N/A')}"
+        
         customer_profile = f"""
+=== CUSTOMER 360° PROFILE ===
 Name: {customer.get('name', 'Unknown')}
 Phone: {customer.get('phone', 'Unknown')}
+Email: {customer.get('email', 'Not set')}
 Type: {customer.get('customer_type', 'individual')}
-Tags: {', '.join(customer.get('tags', []))}
-Notes: {customer.get('notes', '')[:200]}
-Devices: {', '.join([d.get('model', '') for d in customer.get('devices', [])[:3]])}
+Company: {customer.get('company', 'N/A')}
+Tags: {', '.join(customer.get('tags', [])) or 'None'}
+
+**SAVED ADDRESSES:**
+{addresses_str}
+
+**DEVICES OWNED:**
+{devices_str}
+
+**PAYMENT INFO:**
+{payment_str}
+
+**NOTES:**
+{customer.get('notes', 'No notes')[:300]}
+
+**AI INSIGHTS:**
+{customer.get('ai_insights', {}).get('summary', 'No insights yet')}
 """
         
         # Fetch past enquiries (conversation history)
