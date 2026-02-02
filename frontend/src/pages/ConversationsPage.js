@@ -7,7 +7,7 @@ import { Badge } from "../components/ui/badge";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
 import { ScrollArea } from "../components/ui/scroll-area";
 import { toast } from "sonner";
-import { Search, Send, Phone, MessageSquare, Sparkles, User as UserIcon } from "lucide-react";
+import { Search, Send, Phone, MessageSquare, Sparkles, User as UserIcon, Clock, AlertTriangle, CheckCircle2 } from "lucide-react";
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
