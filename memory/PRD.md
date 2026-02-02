@@ -218,7 +218,7 @@ Configurable AI rules system - define all AI behavior via UI without code change
 - ✅ Settings
 
 ## Test Credentials
-- Email: test@test.com
+- Email: fresh@test.com (or test@test.com)
 - Password: test123
 
 ## WhatsApp Command Formats
