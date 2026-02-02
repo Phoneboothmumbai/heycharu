@@ -1537,23 +1537,31 @@ async def register(user: UserCreate):
     token = create_token(user_id, user.email)
     return {"token": token, "user": {"id": user_id, "email": user.email, "name": user.name, "role": user.role}}
 
+@api_router.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
+
 @api_router.post("/auth/reset-admin")
 async def reset_admin_password():
     """Emergency endpoint to reset admin password - REMOVE IN PRODUCTION"""
-    hashed = hash_password("admin123")
-    result = await db.users.update_one(
-        {"email": "ck@motta.in"},
-        {"$set": {"password": hashed, "name": "Charu", "role": "admin"}},
-        upsert=True
-    )
-    # Also ensure user has an id
-    user = await db.users.find_one({"email": "ck@motta.in"})
-    if user and "id" not in user:
-        await db.users.update_one(
-            {"email": "ck@motta.in"},
-            {"$set": {"id": str(uuid.uuid4()), "created_at": datetime.now(timezone.utc).isoformat()}}
-        )
-    return {"message": "Admin password reset to admin123", "email": "ck@motta.in"}
+    try:
+        hashed = hash_password("admin123")
+        # First delete any existing user to avoid conflicts
+        await db.users.delete_many({"email": "ck@motta.in"})
+        # Create fresh user
+        user_id = str(uuid.uuid4())
+        await db.users.insert_one({
+            "id": user_id,
+            "email": "ck@motta.in",
+            "password": hashed,
+            "name": "Charu",
+            "role": "admin",
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+        return {"message": "Admin user recreated with password admin123", "email": "ck@motta.in", "user_id": user_id}
+    except Exception as e:
+        return {"error": str(e)}
 
 @api_router.post("/auth/login", response_model=dict)
 async def login(credentials: UserLogin):
